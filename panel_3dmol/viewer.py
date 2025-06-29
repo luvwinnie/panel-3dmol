@@ -166,6 +166,12 @@ class Mol3DViewer(ReactiveHTML):
         super().__init__(**params)
     
     # py3dmol-compatible API methods
+    def addModel(self, data, format):
+        """Add a molecular model to the viewer (py3dmol compatible)"""
+        self.structure = data
+        self.filetype = format
+        return self
+    
     def setStyle(self, selection={}, style={}):
         """Set molecular style (py3dmol compatible)"""
         self.show_stick = False

@@ -73,6 +73,21 @@ ATOM      6  C   CAF     1      -0.744  -0.037   0.000  1.00  0.00           C  
         assert viewer.show_stick == False
         assert viewer.show_cartoon == True
 
+    def test_add_model_method(self):
+        """Test py3dmol-compatible addModel method"""
+        viewer = Mol3DViewer()
+        
+        result = viewer.addModel(self.benzene_xyz, 'xyz')
+        assert result is viewer  # Should return self for chaining
+        assert viewer.structure == self.benzene_xyz
+        assert viewer.filetype == 'xyz'
+        
+        # Test with PDB format
+        result = viewer.addModel(self.caffeine_pdb, 'pdb')
+        assert result is viewer
+        assert viewer.structure == self.caffeine_pdb
+        assert viewer.filetype == 'pdb'
+
     def test_set_style_method(self):
         """Test py3dmol-compatible setStyle method"""
         viewer = Mol3DViewer()
