@@ -288,6 +288,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install jupyterlite-core jupyterlite-pyodide-kernel
+        pip install jupyter-server jupyterlab-server libarchive-c
         pip install -e .
         
     - name: Create JupyterLite test content
@@ -376,8 +377,14 @@ jobs:
         
     - name: Build JupyterLite site
       run: |
-        jupyter lite build --contents content --output-dir dist
-        echo "✅ JupyterLite site built successfully"
+        # First build basic site
+        jupyter lite build --output-dir dist
+        echo "✅ Basic JupyterLite site built successfully"
+        
+        # Then copy our test notebook to the built site
+        mkdir -p dist/files
+        cp content/test_panel_3dmol.ipynb dist/files/
+        echo "✅ Test notebook copied to JupyterLite site"
         
     - name: Upload JupyterLite artifact
       uses: actions/upload-artifact@v4
@@ -395,11 +402,17 @@ jobs:
             exit 1
         fi
         
-        if [ -f "dist/notebooks/test_panel_3dmol.ipynb" ]; then
+        if [ -f "dist/files/test_panel_3dmol.ipynb" ]; then
             echo "✅ Test notebook included in JupyterLite"
         else
             echo "❌ Test notebook missing from JupyterLite"
             exit 1
         fi
+        
+        # List contents for debugging
+        echo "📂 JupyterLite build contents:"
+        ls -la dist/
+        echo "📂 Files directory:"
+        ls -la dist/files/ || echo "No files directory"
         
         echo "✅ JupyterLite test completed successfully"

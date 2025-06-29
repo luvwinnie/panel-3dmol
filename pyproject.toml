@@ -66,6 +66,9 @@ examples = [
     "numpy",
     "jupyterlite-core",
     "jupyterlite-pyodide-kernel",
+    "jupyter-server",
+    "jupyterlab-server",
+    "libarchive-c",
 ]
 test = [
     "pytest>=6.0",
