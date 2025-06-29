@@ -19,70 +19,31 @@ class Mol3DViewer(ReactiveHTML):
     show_surface = param.Boolean(default=False, doc="Show surface representation")
     show_line = param.Boolean(default=False, doc="Show line representation")
     
-    # HTML template with proper element reference
+    # HTML template (simple and supports multiple instances)
     _template = """
-    <div id="viewer-${id}" style="width: 100%; height: 400px; border: 1px solid #ddd; position: relative;">
-        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-                    display: none;" id="loading-${id}">Loading 3Dmol.js...</div>
-    </div>
+    <div id="viewer" style="width: 100%; height: 400px; border: 1px solid #ddd;"></div>
     """
     
-    # JavaScript for 3Dmol.js integration
+    # JavaScript for 3Dmol.js integration (simple working pattern)
     _scripts = {
         "render": """
-            // Wait for 3Dmol.js to load
-            function wait3DMol(callback, timeout = 10000) {
-                const start = Date.now();
-                function check() {
-                    if (typeof window.$3Dmol !== 'undefined') {
-                        callback();
-                    } else if (Date.now() - start < timeout) {
-                        setTimeout(check, 100);
-                    } else {
-                        console.error('3Dmol.js failed to load within timeout');
-                        const loading = document.getElementById('loading-' + data.id);
-                        if (loading) loading.innerHTML = 'Failed to load 3Dmol.js';
-                    }
-                }
-                check();
+            const viewerDiv = viewer;
+            state.viewer = $3Dmol.createViewer(viewerDiv, {backgroundColor: data.background_color || "white"});
+            if (data.structure) {
+                state.viewer.addModel(data.structure, data.filetype);
+                state.viewer.setStyle({}, {stick:{radius: 0.15}, sphere:{radius: 0.3}});
+                state.viewer.zoomTo();
+                state.viewer.render();
             }
-            
-            // Initialize viewer
-            const viewerDiv = document.getElementById('viewer-' + data.id);
-            if (viewerDiv && !state.viewer) {
-                const loading = document.getElementById('loading-' + data.id);
-                if (loading) loading.style.display = 'block';
-                
-                wait3DMol(() => {
-                    try {
-                        state.viewer = window.$3Dmol.createViewer(viewerDiv, {
-                            backgroundColor: data.background_color || "white"
-                        });
-                        
-                        if (loading) loading.style.display = 'none';
-                        
-                        // Load initial structure if provided
-                        if (data.structure) {
-                            state.loadStructure();
-                        }
-                        
-                        console.log('3Dmol viewer initialized successfully');
-                    } catch (error) {
-                        console.error('Failed to create 3Dmol viewer:', error);
-                        if (loading) loading.innerHTML = 'Error creating viewer';
-                    }
-                });
-            }
-            
-            // Helper function to load structure
-            state.loadStructure = function() {
-                if (!state.viewer || !data.structure) return;
-                
-                try {
-                    state.viewer.clear();
+        """,
+        
+        "structure": """
+            if (state.viewer) {
+                state.viewer.clear();
+                if (data.structure) {
                     state.viewer.addModel(data.structure, data.filetype);
                     
-                    // Apply styles
+                    // Build style based on current parameters
                     const style = {};
                     if (data.show_stick) style.stick = {radius: 0.15};
                     if (data.show_sphere) style.sphere = {radius: 0.3};
@@ -90,7 +51,7 @@ class Mol3DViewer(ReactiveHTML):
                     if (data.show_line) style.line = {};
                     if (data.show_surface) style.surface = {};
                     
-                    // Default style if none selected
+                    // Default to stick+sphere if nothing selected
                     if (Object.keys(style).length === 0) {
                         style.stick = {radius: 0.15};
                         style.sphere = {radius: 0.3};
@@ -99,23 +60,31 @@ class Mol3DViewer(ReactiveHTML):
                     state.viewer.setStyle({}, style);
                     state.viewer.zoomTo();
                     state.viewer.render();
-                    
-                    console.log('Structure loaded successfully');
-                } catch (error) {
-                    console.error('Error loading structure:', error);
                 }
-            };
-        """,
-        
-        "structure": """
-            if (state.loadStructure) {
-                state.loadStructure();
             }
         """,
         
         "filetype": """
-            if (state.loadStructure) {
-                state.loadStructure();
+            if (state.viewer && data.structure) {
+                state.viewer.clear();
+                state.viewer.addModel(data.structure, data.filetype);
+                
+                // Apply current style
+                const style = {};
+                if (data.show_stick) style.stick = {radius: 0.15};
+                if (data.show_sphere) style.sphere = {radius: 0.3};
+                if (data.show_cartoon) style.cartoon = {};
+                if (data.show_line) style.line = {};
+                if (data.show_surface) style.surface = {};
+                
+                if (Object.keys(style).length === 0) {
+                    style.stick = {radius: 0.15};
+                    style.sphere = {radius: 0.3};
+                }
+                
+                state.viewer.setStyle({}, style);
+                state.viewer.zoomTo();
+                state.viewer.render();
             }
         """,
         
@@ -127,32 +96,97 @@ class Mol3DViewer(ReactiveHTML):
         """,
         
         "show_stick": """
-            if (state.loadStructure) {
-                state.loadStructure();
+            if (state.viewer && data.structure) {
+                const style = {};
+                if (data.show_stick) style.stick = {radius: 0.15};
+                if (data.show_sphere) style.sphere = {radius: 0.3};
+                if (data.show_cartoon) style.cartoon = {};
+                if (data.show_line) style.line = {};
+                if (data.show_surface) style.surface = {};
+                
+                if (Object.keys(style).length === 0) {
+                    style.stick = {radius: 0.15};
+                    style.sphere = {radius: 0.3};
+                }
+                
+                state.viewer.setStyle({}, style);
+                state.viewer.render();
             }
         """,
         
         "show_sphere": """
-            if (state.loadStructure) {
-                state.loadStructure();
+            if (state.viewer && data.structure) {
+                const style = {};
+                if (data.show_stick) style.stick = {radius: 0.15};
+                if (data.show_sphere) style.sphere = {radius: 0.3};
+                if (data.show_cartoon) style.cartoon = {};
+                if (data.show_line) style.line = {};
+                if (data.show_surface) style.surface = {};
+                
+                if (Object.keys(style).length === 0) {
+                    style.stick = {radius: 0.15};
+                    style.sphere = {radius: 0.3};
+                }
+                
+                state.viewer.setStyle({}, style);
+                state.viewer.render();
             }
         """,
         
         "show_cartoon": """
-            if (state.loadStructure) {
-                state.loadStructure();
+            if (state.viewer && data.structure) {
+                const style = {};
+                if (data.show_stick) style.stick = {radius: 0.15};
+                if (data.show_sphere) style.sphere = {radius: 0.3};
+                if (data.show_cartoon) style.cartoon = {};
+                if (data.show_line) style.line = {};
+                if (data.show_surface) style.surface = {};
+                
+                if (Object.keys(style).length === 0) {
+                    style.stick = {radius: 0.15};
+                    style.sphere = {radius: 0.3};
+                }
+                
+                state.viewer.setStyle({}, style);
+                state.viewer.render();
             }
         """,
         
         "show_line": """
-            if (state.loadStructure) {
-                state.loadStructure();
+            if (state.viewer && data.structure) {
+                const style = {};
+                if (data.show_stick) style.stick = {radius: 0.15};
+                if (data.show_sphere) style.sphere = {radius: 0.3};
+                if (data.show_cartoon) style.cartoon = {};
+                if (data.show_line) style.line = {};
+                if (data.show_surface) style.surface = {};
+                
+                if (Object.keys(style).length === 0) {
+                    style.stick = {radius: 0.15};
+                    style.sphere = {radius: 0.3};
+                }
+                
+                state.viewer.setStyle({}, style);
+                state.viewer.render();
             }
         """,
         
         "show_surface": """
-            if (state.loadStructure) {
-                state.loadStructure();
+            if (state.viewer && data.structure) {
+                const style = {};
+                if (data.show_stick) style.stick = {radius: 0.15};
+                if (data.show_sphere) style.sphere = {radius: 0.3};
+                if (data.show_cartoon) style.cartoon = {};
+                if (data.show_line) style.line = {};
+                if (data.show_surface) style.surface = {};
+                
+                if (Object.keys(style).length === 0) {
+                    style.stick = {radius: 0.15};
+                    style.sphere = {radius: 0.3};
+                }
+                
+                state.viewer.setStyle({}, style);
+                state.viewer.render();
             }
         """
     }
