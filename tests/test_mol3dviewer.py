@@ -208,8 +208,8 @@ ATOM      6  C   CAF     1      -0.744  -0.037   0.000  1.00  0.00           C  
         viewer = Mol3DViewer()
         assert hasattr(viewer, '_template')
         assert isinstance(viewer._template, str)
-        assert 'viewer-' in viewer._template  # Should have viewer element
-        assert 'loading-' in viewer._template  # Should have loading element
+        assert 'id="viewer"' in viewer._template  # Should have viewer element
+        assert 'div' in viewer._template  # Should be a div element
 
     def test_scripts_structure(self):
         """Test that JavaScript scripts are properly defined"""
@@ -218,10 +218,39 @@ ATOM      6  C   CAF     1      -0.744  -0.037   0.000  1.00  0.00           C  
         assert isinstance(viewer._scripts, dict)
         
         # Check for essential script handlers
-        essential_scripts = ['render', 'structure', 'background_color']
+        essential_scripts = [
+            'render', 'structure', 'filetype', 'background_color',
+            'show_stick', 'show_sphere', 'show_cartoon', 'show_line', 'show_surface'
+        ]
         for script in essential_scripts:
             assert script in viewer._scripts
             assert isinstance(viewer._scripts[script], str)
+            assert len(viewer._scripts[script]) > 0
+    
+    def test_javascript_pattern(self):
+        """Test that JavaScript uses simplified working pattern"""
+        viewer = Mol3DViewer()
+        
+        # Check render script uses direct viewer reference
+        render_script = viewer._scripts['render']
+        assert 'const viewerDiv = viewer;' in render_script
+        assert '$3Dmol.createViewer' in render_script
+        assert 'state.viewer =' in render_script
+        
+        # Check structure script has proper style handling
+        structure_script = viewer._scripts['structure']
+        assert 'state.viewer.clear()' in structure_script
+        assert 'state.viewer.addModel' in structure_script
+        assert 'state.viewer.setStyle' in structure_script
+        assert 'state.viewer.zoomTo()' in structure_script
+        assert 'state.viewer.render()' in structure_script
+        
+        # Check style scripts handle all visualization types
+        for style_param in ['show_stick', 'show_sphere', 'show_cartoon', 'show_line', 'show_surface']:
+            style_script = viewer._scripts[style_param]
+            assert 'state.viewer &&' in style_script
+            assert 'data.structure' in style_script
+            assert 'const style = {};' in style_script
 
 
 class TestViewFactory:
@@ -253,6 +282,23 @@ class TestPanelIntegration:
     def setup_method(self):
         """Set up Panel extension"""
         pn.extension()
+        
+        # Sample molecular data for testing
+        self.benzene_xyz = """6
+Benzene molecule
+C    0.0000    1.3970    0.0000
+C    1.2098    0.6985    0.0000  
+C    1.2098   -0.6985    0.0000
+C    0.0000   -1.3970    0.0000
+C   -1.2098   -0.6985    0.0000
+C   -1.2098    0.6985    0.0000"""
+        
+        self.caffeine_pdb = """ATOM      1  N   CAF     1      -0.744   1.329   0.000  1.00  0.00           N  
+ATOM      2  C   CAF     1       0.558   1.875   0.000  1.00  0.00           C  
+ATOM      3  C   CAF     1       1.657   1.080   0.000  1.00  0.00           C  
+ATOM      4  N   CAF     1       1.657  -0.287   0.000  1.00  0.00           N  
+ATOM      5  C   CAF     1       0.455  -0.832   0.000  1.00  0.00           C  
+ATOM      6  C   CAF     1      -0.744  -0.037   0.000  1.00  0.00           C  """
     
     def test_reactive_parameters(self):
         """Test that parameters are reactive"""
@@ -289,6 +335,24 @@ class TestPanelIntegration:
         viewer2.background_color = 'black'
         
         assert viewer1.background_color != viewer2.background_color
+        
+        # Test different molecular structures
+        viewer1.structure = self.benzene_xyz
+        viewer1.filetype = 'xyz'
+        viewer2.structure = self.caffeine_pdb
+        viewer2.filetype = 'pdb'
+        
+        assert viewer1.structure != viewer2.structure
+        assert viewer1.filetype != viewer2.filetype
+        
+        # Test different styles
+        viewer1.setStyle({}, {'stick': {}, 'sphere': {}})
+        viewer2.setStyle({}, {'cartoon': {}})
+        
+        assert viewer1.show_stick == True
+        assert viewer1.show_cartoon == False
+        assert viewer2.show_stick == False
+        assert viewer2.show_cartoon == True
 
 
 if __name__ == "__main__":
