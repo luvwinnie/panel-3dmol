@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "panel-3dmol"
 version = "0.1.0"
 authors = [
-    {name = "Panel-Chem Contributors", email = "info@panel-chem.org"},
+    {name = "Chee Siang LEOW", email = "leow@yamanashi.ac.jp"},
 ]
 description = "3D Molecular Visualization Extension for Panel"
 readme = "README.md"
