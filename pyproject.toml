@@ -40,7 +40,7 @@ keywords = [
     "interactive",
 ]
 dependencies = [
-    "panel>=1.0.0",
+    "panel>=0.0.0",
     "param>=1.12.0",
 ]
 
