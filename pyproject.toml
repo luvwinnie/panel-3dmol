@@ -1,0 +1,99 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panel-3dmol"
+version = "0.1.0"
+authors = [
+    {name = "Panel-Chem Contributors", email = "info@panel-chem.org"},
+]
+description = "3D Molecular Visualization Extension for Panel"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Jupyter",
+    "Framework :: Jupyter :: JupyterLab",
+    "Operating System :: OS Independent",
+]
+keywords = [
+    "panel", 
+    "3dmol", 
+    "molecular", 
+    "visualization", 
+    "chemistry", 
+    "dashboard",
+    "jupyter",
+    "interactive",
+]
+dependencies = [
+    "panel>=1.0.0",
+    "param>=1.12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "black",
+    "flake8",
+    "mypy",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme", 
+    "nbsphinx",
+]
+examples = [
+    "jupyter",
+    "jupyterlab",
+    "matplotlib",
+    "numpy",
+]
+
+[project.urls]
+Homepage = "https://github.com/luvwinnie/panel-chem"
+Repository = "https://github.com/luvwinnie/panel-chem.git"
+Documentation = "https://github.com/luvwinnie/panel-chem#readme"
+"Bug Tracker" = "https://github.com/luvwinnie/panel-chem/issues"
+
+[project.entry-points."panel.extension"]
+panel_3dmol = "panel_3dmol"
+
+[tool.setuptools.packages.find]
+include = ["panel_3dmol*"]
+
+[tool.setuptools.package-data]
+"panel_3dmol" = ["*.js", "*.css", "static/**/*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
