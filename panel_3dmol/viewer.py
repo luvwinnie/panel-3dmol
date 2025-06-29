@@ -1,24 +1,13 @@
-# ✅ Fixed Dual Molecular Viewer - Using Proven Working Code
 import panel as pn
 import param
 from panel.reactive import ReactiveHTML
 
-# Enable Panel extensions
-pn.extension('tabulator')
-pn.config.sizing_mode = 'stretch_width'
-
-# Global variables to access uploaded files
-REACTANT_DATA = ""
-PRODUCT_DATA = ""
-
 class Mol3DViewer(ReactiveHTML):
     """
     A Panel component for 3D molecular visualization using 3Dmol.js.
-    
-    Based on proven working ReactiveHTML approach for maximum stability.
     """
     
-    # Core parameters (simplified and proven to work)
+    # Core parameters
     structure = param.String(default="", doc="Molecular structure data")
     filetype = param.String(default="xyz", doc="File type (xyz, mol, pdb, sdf, etc.)")
     background_color = param.String(default="white", doc="Background color")
@@ -30,30 +19,70 @@ class Mol3DViewer(ReactiveHTML):
     show_surface = param.Boolean(default=False, doc="Show surface representation")
     show_line = param.Boolean(default=False, doc="Show line representation")
     
-    # Simple, clean template (proven to work)
+    # HTML template with proper element reference
     _template = """
-    <div id="viewer" style="width: 100%; height: 400px; border: 1px solid #ddd;"></div>
+    <div id="viewer-${id}" style="width: 100%; height: 400px; border: 1px solid #ddd; position: relative;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                    display: none;" id="loading-${id}">Loading 3Dmol.js...</div>
+    </div>
     """
     
-    # Use _scripts exactly like your working code (PROVEN TO WORK!)
+    # JavaScript for 3Dmol.js integration
     _scripts = {
         "render": """
-            const viewerDiv = viewer;
-            state.viewer = $3Dmol.createViewer(viewerDiv, {backgroundColor: data.background_color || "white"});
-            if (data.structure) {
-                state.viewer.addModel(data.structure, data.filetype);
-                state.viewer.setStyle({}, {stick:{radius: 0.15}, sphere:{radius: 0.3}});
-                state.viewer.zoomTo();
-                state.viewer.render();
+            // Wait for 3Dmol.js to load
+            function wait3DMol(callback, timeout = 10000) {
+                const start = Date.now();
+                function check() {
+                    if (typeof window.$3Dmol !== 'undefined') {
+                        callback();
+                    } else if (Date.now() - start < timeout) {
+                        setTimeout(check, 100);
+                    } else {
+                        console.error('3Dmol.js failed to load within timeout');
+                        const loading = document.getElementById('loading-' + data.id);
+                        if (loading) loading.innerHTML = 'Failed to load 3Dmol.js';
+                    }
+                }
+                check();
             }
-        """,
-        "structure": """
-            if (state.viewer) {
-                state.viewer.clear();
-                if (data.structure) {
+            
+            // Initialize viewer
+            const viewerDiv = document.getElementById('viewer-' + data.id);
+            if (viewerDiv && !state.viewer) {
+                const loading = document.getElementById('loading-' + data.id);
+                if (loading) loading.style.display = 'block';
+                
+                wait3DMol(() => {
+                    try {
+                        state.viewer = window.$3Dmol.createViewer(viewerDiv, {
+                            backgroundColor: data.background_color || "white"
+                        });
+                        
+                        if (loading) loading.style.display = 'none';
+                        
+                        // Load initial structure if provided
+                        if (data.structure) {
+                            state.loadStructure();
+                        }
+                        
+                        console.log('3Dmol viewer initialized successfully');
+                    } catch (error) {
+                        console.error('Failed to create 3Dmol viewer:', error);
+                        if (loading) loading.innerHTML = 'Error creating viewer';
+                    }
+                });
+            }
+            
+            // Helper function to load structure
+            state.loadStructure = function() {
+                if (!state.viewer || !data.structure) return;
+                
+                try {
+                    state.viewer.clear();
                     state.viewer.addModel(data.structure, data.filetype);
                     
-                    // Build style based on current parameters
+                    // Apply styles
                     const style = {};
                     if (data.show_stick) style.stick = {radius: 0.15};
                     if (data.show_sphere) style.sphere = {radius: 0.3};
@@ -61,7 +90,7 @@ class Mol3DViewer(ReactiveHTML):
                     if (data.show_line) style.line = {};
                     if (data.show_surface) style.surface = {};
                     
-                    // Default to stick+sphere if nothing selected
+                    // Default style if none selected
                     if (Object.keys(style).length === 0) {
                         style.stick = {radius: 0.15};
                         style.sphere = {radius: 0.3};
@@ -70,131 +99,65 @@ class Mol3DViewer(ReactiveHTML):
                     state.viewer.setStyle({}, style);
                     state.viewer.zoomTo();
                     state.viewer.render();
+                    
+                    console.log('Structure loaded successfully');
+                } catch (error) {
+                    console.error('Error loading structure:', error);
                 }
+            };
+        """,
+        
+        "structure": """
+            if (state.loadStructure) {
+                state.loadStructure();
             }
         """,
+        
         "filetype": """
-            if (state.viewer && data.structure) {
-                state.viewer.clear();
-                state.viewer.addModel(data.structure, data.filetype);
-                
-                // Apply current style
-                const style = {};
-                if (data.show_stick) style.stick = {radius: 0.15};
-                if (data.show_sphere) style.sphere = {radius: 0.3};
-                if (data.show_cartoon) style.cartoon = {};
-                if (data.show_line) style.line = {};
-                if (data.show_surface) style.surface = {};
-                
-                if (Object.keys(style).length === 0) {
-                    style.stick = {radius: 0.15};
-                    style.sphere = {radius: 0.3};
-                }
-                
-                state.viewer.setStyle({}, style);
-                state.viewer.zoomTo();
-                state.viewer.render();
+            if (state.loadStructure) {
+                state.loadStructure();
             }
         """,
+        
         "background_color": """
             if (state.viewer) {
                 state.viewer.setBackgroundColor(data.background_color || "white");
                 state.viewer.render();
             }
         """,
+        
         "show_stick": """
-            if (state.viewer && data.structure) {
-                const style = {};
-                if (data.show_stick) style.stick = {radius: 0.15};
-                if (data.show_sphere) style.sphere = {radius: 0.3};
-                if (data.show_cartoon) style.cartoon = {};
-                if (data.show_line) style.line = {};
-                if (data.show_surface) style.surface = {};
-                
-                if (Object.keys(style).length === 0) {
-                    style.stick = {radius: 0.15};
-                    style.sphere = {radius: 0.3};
-                }
-                
-                state.viewer.setStyle({}, style);
-                state.viewer.render();
+            if (state.loadStructure) {
+                state.loadStructure();
             }
         """,
+        
         "show_sphere": """
-            if (state.viewer && data.structure) {
-                const style = {};
-                if (data.show_stick) style.stick = {radius: 0.15};
-                if (data.show_sphere) style.sphere = {radius: 0.3};
-                if (data.show_cartoon) style.cartoon = {};
-                if (data.show_line) style.line = {};
-                if (data.show_surface) style.surface = {};
-                
-                if (Object.keys(style).length === 0) {
-                    style.stick = {radius: 0.15};
-                    style.sphere = {radius: 0.3};
-                }
-                
-                state.viewer.setStyle({}, style);
-                state.viewer.render();
+            if (state.loadStructure) {
+                state.loadStructure();
             }
         """,
+        
         "show_cartoon": """
-            if (state.viewer && data.structure) {
-                const style = {};
-                if (data.show_stick) style.stick = {radius: 0.15};
-                if (data.show_sphere) style.sphere = {radius: 0.3};
-                if (data.show_cartoon) style.cartoon = {};
-                if (data.show_line) style.line = {};
-                if (data.show_surface) style.surface = {};
-                
-                if (Object.keys(style).length === 0) {
-                    style.stick = {radius: 0.15};
-                    style.sphere = {radius: 0.3};
-                }
-                
-                state.viewer.setStyle({}, style);
-                state.viewer.render();
+            if (state.loadStructure) {
+                state.loadStructure();
             }
         """,
+        
         "show_line": """
-            if (state.viewer && data.structure) {
-                const style = {};
-                if (data.show_stick) style.stick = {radius: 0.15};
-                if (data.show_sphere) style.sphere = {radius: 0.3};
-                if (data.show_cartoon) style.cartoon = {};
-                if (data.show_line) style.line = {};
-                if (data.show_surface) style.surface = {};
-                
-                if (Object.keys(style).length === 0) {
-                    style.stick = {radius: 0.15};
-                    style.sphere = {radius: 0.3};
-                }
-                
-                state.viewer.setStyle({}, style);
-                state.viewer.render();
+            if (state.loadStructure) {
+                state.loadStructure();
             }
         """,
+        
         "show_surface": """
-            if (state.viewer && data.structure) {
-                const style = {};
-                if (data.show_stick) style.stick = {radius: 0.15};
-                if (data.show_sphere) style.sphere = {radius: 0.3};
-                if (data.show_cartoon) style.cartoon = {};
-                if (data.show_line) style.line = {};
-                if (data.show_surface) style.surface = {};
-                
-                if (Object.keys(style).length === 0) {
-                    style.stick = {radius: 0.15};
-                    style.sphere = {radius: 0.3};
-                }
-                
-                state.viewer.setStyle({}, style);
-                state.viewer.render();
+            if (state.loadStructure) {
+                state.loadStructure();
             }
         """
     }
     
-    # JavaScript dependencies - exactly like your working code
+    # JavaScript dependencies
     __javascript__ = [
         "https://3dmol.org/build/3Dmol.js"
     ]
@@ -205,14 +168,12 @@ class Mol3DViewer(ReactiveHTML):
     # py3dmol-compatible API methods
     def setStyle(self, selection={}, style={}):
         """Set molecular style (py3dmol compatible)"""
-        # Reset all styles first
         self.show_stick = False
         self.show_sphere = False
         self.show_cartoon = False
         self.show_line = False
         self.show_surface = False
         
-        # Set styles based on input
         if 'stick' in style:
             self.show_stick = True
         if 'sphere' in style:
@@ -224,7 +185,6 @@ class Mol3DViewer(ReactiveHTML):
         if 'surface' in style:
             self.show_surface = True
             
-        # Default to stick+sphere if no style specified
         if not any([self.show_stick, self.show_sphere, self.show_cartoon, 
                    self.show_line, self.show_surface]):
             self.show_stick = True
@@ -239,7 +199,6 @@ class Mol3DViewer(ReactiveHTML):
     
     def render(self):
         """Force render update (py3dmol compatible)"""
-        # Trigger re-render by updating structure parameter
         self.param.trigger('structure')
         return self
     
