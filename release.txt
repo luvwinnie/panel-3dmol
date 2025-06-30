@@ -1,0 +1,73 @@
+# Panel-3Dmol Release Notes
+
+## 🧬 Panel-3Dmol: 3D Molecular Visualization Extension for Panel
+
+**Version 0.1.0** - A comprehensive 3D molecular visualization widget for Panel applications, bringing interactive molecular graphics to Python dashboards.
+
+### 🎯 What This Package Does
+
+Panel-3Dmol provides a seamless integration between Panel and 3Dmol.js, enabling scientists and researchers to create interactive 3D molecular visualizations directly within their Python applications. Built on Panel's ReactiveHTML framework, it offers a py3dmol-compatible API for easy adoption.
+
+### ✨ Key Features
+
+- **🔬 Multi-Format Support**: Load molecular structures from XYZ, PDB, MOL, SDF, and other common formats
+- **🎨 Rich Visualization Styles**: Support for stick, sphere, cartoon, line, and surface representations
+- **⚡ Multiple Instances**: Create unlimited molecular viewers in a single application
+- **🔗 py3dmol Compatible**: Drop-in replacement with familiar API methods
+- **📱 Responsive Design**: Adapts to different screen sizes and layouts
+- **🎛️ Interactive Controls**: Real-time style switching and background customization
+
+### 🚀 Perfect For
+
+- **Chemical Research**: Visualize molecular structures and conformations
+- **Drug Discovery**: Display protein-ligand interactions and binding sites
+- **Educational Tools**: Create interactive chemistry learning applications
+- **Data Analysis**: Build molecular visualization dashboards
+- **Scientific Presentations**: Embed 3D structures in interactive reports
+
+### 💻 Simple Usage
+
+```python
+import panel as pn
+from panel_3dmol import Mol3DViewer
+
+# Enable Panel extension
+pn.extension('filedropper')
+
+# Create molecular viewer
+viewer = Mol3DViewer()
+
+# Load structure
+viewer.structure = your_molecular_data
+viewer.filetype = 'xyz'  # or 'pdb', 'sdf', etc.
+
+# Customize visualization
+viewer.setStyle({}, {'stick': {'radius': 0.15}, 'sphere': {'radius': 0.3}})
+viewer.setBackgroundColor('lightgray')
+
+# Create Panel app
+app = pn.Column("# My Molecular Viewer", viewer)
+app.servable()
+```
+
+### 🔧 Technical Highlights
+
+- **ReactiveHTML Backend**: Built on Panel's modern reactive framework
+- **3Dmol.js Integration**: Leverages industry-standard WebGL molecular graphics
+- **Parameter Reactivity**: Real-time updates when properties change
+- **Method Chaining**: Fluent API for complex configurations
+- **Memory Efficient**: Optimized JavaScript patterns for multiple instances
+
+### 🎯 Use Cases
+
+1. **Dual Molecular Comparison**: Side-by-side reactant/product visualization
+2. **Interactive Dashboards**: Combine with Panel widgets for parameter control
+3. **Batch Processing**: Display multiple conformations or crystal structures
+4. **Educational Interfaces**: Student-friendly molecular exploration tools
+5. **Research Workflows**: Integrate with computational chemistry pipelines
+
+### 🌟 What Makes It Special
+
+Unlike other molecular visualization tools, Panel-3Dmol is designed specifically for integration with Panel's ecosystem. It provides the flexibility of py3dmol with the power of Panel's reactive architecture, making it ideal for building sophisticated scientific web applications without JavaScript knowledge.
+
+**Ready to visualize molecules in 3D? Get started with Panel-3Dmol today!**

@@ -19,6 +19,10 @@ class Mol3DViewer(ReactiveHTML):
     show_surface = param.Boolean(default=False, doc="Show surface representation")
     show_line = param.Boolean(default=False, doc="Show line representation")
     
+    # Label parameters
+    labels = param.List(default=[], doc="List of labels to display")
+    show_atom_labels = param.Boolean(default=False, doc="Automatically show atom indices")
+    
     # HTML template (simple and supports multiple instances)
     _template = """
     <div id="viewer" style="width: 100%; height: 400px; border: 1px solid #ddd;"></div>
@@ -59,6 +63,65 @@ class Mol3DViewer(ReactiveHTML):
                     
                     state.viewer.setStyle({}, style);
                     state.viewer.zoomTo();
+                    
+                    // Handle labels after structure is loaded
+                    state.viewer.removeAllLabels();
+                    
+                    // Add atom labels if enabled
+                    if (data.show_atom_labels) {
+                        const lines = data.structure.trim().split('\\n');
+                        if (data.filetype === 'xyz' && lines.length > 2) {
+                            const natoms = parseInt(lines[0]);
+                            const atomLines = lines.slice(2, 2 + natoms);
+                            
+                            atomLines.forEach((line, idx) => {
+                                const parts = line.trim().split(/\\s+/);
+                                if (parts.length >= 4) {
+                                    const x = parseFloat(parts[1]);
+                                    const y = parseFloat(parts[2]);
+                                    const z = parseFloat(parts[3]);
+                                    
+                                    state.viewer.addLabel(String(idx + 1), {
+                                        position: {x: x, y: y, z: z},
+                                        backgroundColor: 'white',
+                                        backgroundOpacity: 0,
+                                        fontColor: 'blue',
+                                        font: 'arial',
+                                        fontSize: 16,
+                                        fontOpacity: 1.0,
+                                        inFront: true
+                                    });
+                                }
+                            });
+                        } else if (data.filetype === 'pdb') {
+                            const atomLines = lines.filter(line => line.startsWith('ATOM') || line.startsWith('HETATM'));
+                            
+                            atomLines.forEach((line, idx) => {
+                                const x = parseFloat(line.substring(30, 38).trim());
+                                const y = parseFloat(line.substring(38, 46).trim());
+                                const z = parseFloat(line.substring(46, 54).trim());
+                                
+                                state.viewer.addLabel(String(idx + 1), {
+                                    position: {x: x, y: y, z: z},
+                                    backgroundColor: 'white',
+                                    backgroundOpacity: 0,
+                                    fontColor: 'blue',
+                                    font: 'arial',
+                                    fontSize: 16,
+                                    fontOpacity: 1.0,
+                                    inFront: true
+                                });
+                            });
+                        }
+                    }
+                    
+                    // Add custom labels
+                    if (data.labels && Array.isArray(data.labels)) {
+                        data.labels.forEach(label => {
+                            state.viewer.addLabel(label.text, label.options || {});
+                        });
+                    }
+                    
                     state.viewer.render();
                 }
             }
@@ -188,6 +251,87 @@ class Mol3DViewer(ReactiveHTML):
                 state.viewer.setStyle({}, style);
                 state.viewer.render();
             }
+        """,
+        
+        "labels": """
+            if (state.viewer) {
+                // Clear existing labels
+                state.viewer.removeAllLabels();
+                
+                // Add custom labels
+                if (data.labels && Array.isArray(data.labels)) {
+                    data.labels.forEach(label => {
+                        state.viewer.addLabel(label.text, label.options || {});
+                    });
+                }
+                
+                state.viewer.render();
+            }
+        """,
+        
+        "show_atom_labels": """
+            if (state.viewer && data.structure) {
+                // Clear existing labels
+                state.viewer.removeAllLabels();
+                
+                // Add atom labels if enabled
+                if (data.show_atom_labels) {
+                    const lines = data.structure.trim().split('\\n');
+                    
+                    if (data.filetype === 'xyz' && lines.length > 2) {
+                        const natoms = parseInt(lines[0]);
+                        const atomLines = lines.slice(2, 2 + natoms);
+                        
+                        atomLines.forEach((line, idx) => {
+                            const parts = line.trim().split(/\\s+/);
+                            if (parts.length >= 4) {
+                                const x = parseFloat(parts[1]);
+                                const y = parseFloat(parts[2]);
+                                const z = parseFloat(parts[3]);
+                                
+                                state.viewer.addLabel(String(idx + 1), {
+                                    position: {x: x, y: y, z: z},
+                                    backgroundColor: 'white',
+                                    backgroundOpacity: 0,
+                                    fontColor: 'blue',
+                                    font: 'arial',
+                                    fontSize: 16,
+                                    fontOpacity: 1.0,
+                                    inFront: true
+                                });
+                            }
+                        });
+                    } else if (data.filetype === 'pdb') {
+                        const atomLines = lines.filter(line => line.startsWith('ATOM') || line.startsWith('HETATM'));
+                        
+                        atomLines.forEach((line, idx) => {
+                            const x = parseFloat(line.substring(30, 38).trim());
+                            const y = parseFloat(line.substring(38, 46).trim());
+                            const z = parseFloat(line.substring(46, 54).trim());
+                            
+                            state.viewer.addLabel(String(idx + 1), {
+                                position: {x: x, y: y, z: z},
+                                backgroundColor: 'white',
+                                backgroundOpacity: 0,
+                                fontColor: 'blue',
+                                font: 'arial',
+                                fontSize: 16,
+                                fontOpacity: 1.0,
+                                inFront: true
+                            });
+                        });
+                    }
+                }
+                
+                // Re-add custom labels
+                if (data.labels && Array.isArray(data.labels)) {
+                    data.labels.forEach(label => {
+                        state.viewer.addLabel(label.text, label.options || {});
+                    });
+                }
+                
+                state.viewer.render();
+            }
         """
     }
     
@@ -198,6 +342,7 @@ class Mol3DViewer(ReactiveHTML):
     
     def __init__(self, **params):
         super().__init__(**params)
+        self._labels_list = []  # Internal storage for labels
     
     # py3dmol-compatible API methods
     def addModel(self, data, format):
@@ -250,6 +395,78 @@ class Mol3DViewer(ReactiveHTML):
     def center(self):
         """Center/zoom to molecule (py3dmol compatible)"""
         self.param.trigger('structure')
+        return self
+    
+    def addLabel(self, text, options=None):
+        """Add a label to the viewer (py3dmol compatible)"""
+        if options is None:
+            options = {}
+        
+        label = {
+            'text': text,
+            'options': options
+        }
+        
+        self._labels_list.append(label)
+        self.labels = self._labels_list.copy()  # Trigger reactivity
+        return self
+    
+    def removeAllLabels(self):
+        """Remove all labels from the viewer (py3dmol compatible)"""
+        self._labels_list = []
+        self.labels = []
+        return self
+    
+    def showAtomLabels(self, show=True):
+        """Show/hide automatic atom index labels"""
+        self.show_atom_labels = show
+        return self
+    
+    def autoLabel(self):
+        """Automatically add atom index labels based on structure"""
+        if not self.structure:
+            return self
+            
+        lines = self.structure.strip().split('\n')
+        
+        if self.filetype == 'xyz' and len(lines) > 2:
+            natoms = int(lines[0])
+            atom_lines = lines[2:2 + natoms]
+            
+            for idx, line in enumerate(atom_lines):
+                parts = line.split()
+                if len(parts) >= 4:
+                    x, y, z = map(float, parts[1:4])
+                    self.addLabel(str(idx + 1), {
+                        'position': {'x': x, 'y': y, 'z': z},
+                        'backgroundColor': 'white',
+                        'backgroundOpacity': 0,
+                        'fontColor': 'blue',
+                        'font': 'arial',
+                        'fontSize': 16,
+                        'fontOpacity': 1.0,
+                        'inFront': True
+                    })
+        
+        elif self.filetype == 'pdb':
+            atom_lines = [line for line in lines if line.startswith(('ATOM', 'HETATM'))]
+            
+            for idx, line in enumerate(atom_lines):
+                if len(line) >= 54:
+                    x = float(line[30:38].strip())
+                    y = float(line[38:46].strip()) 
+                    z = float(line[46:54].strip())
+                    self.addLabel(str(idx + 1), {
+                        'position': {'x': x, 'y': y, 'z': z},
+                        'backgroundColor': 'white',
+                        'backgroundOpacity': 0,
+                        'fontColor': 'blue',
+                        'font': 'arial',
+                        'fontSize': 16,
+                        'fontOpacity': 1.0,
+                        'inFront': True
+                    })
+        
         return self
 
 # Factory function for easier usage (py3dmol compatible)
