@@ -41,7 +41,14 @@ class Mol3DViewer(ReactiveHTML):
             const viewerDiv = viewer;
             state.viewer = $3Dmol.createViewer(viewerDiv, {backgroundColor: data.background_color || "white"});
             if (data.structure) {
-                state.viewer.addModel(data.structure, data.filetype);
+                // Check if this is multi-frame data
+                if (data.total_frames > 1) {
+                    // Use addModelsAsFrames for multi-frame structures
+                    state.viewer.addModelsAsFrames(data.structure, data.filetype);
+                } else {
+                    // Single frame - use regular addModel
+                    state.viewer.addModel(data.structure, data.filetype);
+                }
                 state.viewer.setStyle({}, {stick:{radius: 0.15}, sphere:{radius: 0.3}});
                 state.viewer.zoomTo();
                 state.viewer.render();
@@ -52,7 +59,14 @@ class Mol3DViewer(ReactiveHTML):
             if (state.viewer) {
                 state.viewer.clear();
                 if (data.structure) {
-                    state.viewer.addModel(data.structure, data.filetype);
+                    // Check if this is multi-frame data
+                    if (data.total_frames > 1) {
+                        // Use addModelsAsFrames for multi-frame structures
+                        state.viewer.addModelsAsFrames(data.structure, data.filetype);
+                    } else {
+                        // Single frame - use regular addModel
+                        state.viewer.addModel(data.structure, data.filetype);
+                    }
                     
                     // Build style based on current parameters
                     const style = {};
@@ -342,64 +356,34 @@ class Mol3DViewer(ReactiveHTML):
         """,
         
         "current_frame": """
-            if (state.viewer) {
-                // Set the current frame using 3Dmol.js setFrame
-                if (data.total_frames > 1) {
-                    state.viewer.setFrame(data.current_frame);
+            if (state.viewer && data.total_frames > 1) {
+                console.log('Setting frame to:', data.current_frame);
+                // Use 3Dmol.js setFrame method for multi-frame structures
+                state.viewer.setFrame(data.current_frame).then(() => {
                     state.viewer.render();
-                }
+                    console.log('Frame set and rendered:', data.current_frame);
+                }).catch(err => {
+                    console.error('Error setting frame:', err);
+                });
             }
         """,
         
         "animate": """
-            if (state.viewer) {
-                if (data.animate && data.total_frames > 1) {
-                    // Start animation
-                    if (!state.animationInterval) {
-                        state.currentFrame = data.current_frame; // Initialize current frame
-                        state.animationInterval = setInterval(() => {
-                            // Get current frame and increment
-                            state.currentFrame = (state.currentFrame + 1) % data.total_frames;
-                            
-                            // Update 3Dmol viewer
-                            if (state.viewer) {
-                                state.viewer.setFrame(state.currentFrame);
-                                state.viewer.render();
-                            }
-                            
-                            // Note: For Panel integration, external code should control 
-                            // the animation through Python parameters rather than relying
-                            // on JavaScript-driven frame updates
-                        }, data.animation_speed);
-                    }
+            if (state.viewer && data.total_frames > 1) {
+                if (data.animate) {
+                    console.log('Animation enabled - using Panel-controlled animation');
+                    // Panel controls the animation, we just need to be ready
+                    // The actual frame updates come through current_frame parameter
                 } else {
-                    // Stop animation
-                    if (state.animationInterval) {
-                        clearInterval(state.animationInterval);
-                        state.animationInterval = null;
-                    }
+                    console.log('Animation disabled');
                 }
             }
         """,
         
         "animation_speed": """
-            if (state.viewer && state.animationInterval) {
-                // Restart animation with new speed
-                clearInterval(state.animationInterval);
-                state.animationInterval = null;
-                
-                if (data.animate && data.total_frames > 1) {
-                    state.animationInterval = setInterval(() => {
-                        // Use internal frame counter
-                        state.currentFrame = (state.currentFrame + 1) % data.total_frames;
-                        if (state.viewer) {
-                            state.viewer.setFrame(state.currentFrame);
-                            state.viewer.render();
-                        }
-                        
-                        // JavaScript animation continues independently
-                    }, data.animation_speed);
-                }
+            if (state.viewer) {
+                console.log('Animation speed changed to:', data.animation_speed, 'ms');
+                // Panel controls the animation speed, no action needed here
             }
         """,
         
@@ -424,6 +408,7 @@ class Mol3DViewer(ReactiveHTML):
         super().__init__(**params)
         self._labels_list = []  # Internal storage for labels
         self._updating_frame = False  # Flag to prevent feedback loops
+        self._frame_structures = []  # Storage for frame structures
         
     
     # py3dmol-compatible API methods
@@ -600,11 +585,14 @@ class Mol3DViewer(ReactiveHTML):
             
             self.total_frames = len(structures)
             self.current_frame = 0
+            # Store the structures for proper 3Dmol.js handling
+            self._frame_structures = structures
         else:
             # Single structure
             self.structure = structures
             self.total_frames = 1
             self.current_frame = 0
+            self._frame_structures = [structures]
             
         return self
 
