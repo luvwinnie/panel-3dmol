@@ -41,14 +41,23 @@ class Mol3DViewer(ReactiveHTML):
             const viewerDiv = viewer;
             state.viewer = $3Dmol.createViewer(viewerDiv, {backgroundColor: data.background_color || "white"});
             if (data.structure) {
-                console.log('Loading structure with', data.total_frames, 'frames');
+                console.log('🧬 RENDER: Loading structure with', data.total_frames, 'frames');
+                console.log('🧬 RENDER: Structure length:', data.structure.length, 'characters');
+                
                 // Check if this is multi-frame data
                 if (data.total_frames > 1) {
-                    console.log('Using addModelsAsFrames for multi-frame structure');
-                    // Use addModelsAsFrames for multi-frame structures
-                    state.viewer.addModelsAsFrames(data.structure, data.filetype);
+                    console.log('🧬 RENDER: Using addModelsAsFrames for multi-frame structure');
+                    try {
+                        // Use addModelsAsFrames for multi-frame structures
+                        state.viewer.addModelsAsFrames(data.structure, data.filetype);
+                        console.log('🧬 RENDER: addModelsAsFrames completed successfully');
+                    } catch (err) {
+                        console.error('🧬 RENDER: Error in addModelsAsFrames:', err);
+                        console.log('🧬 RENDER: Falling back to single model...');
+                        state.viewer.addModel(data.structure, data.filetype);
+                    }
                 } else {
-                    console.log('Using addModel for single frame');
+                    console.log('🧬 RENDER: Using addModel for single frame');
                     // Single frame - use regular addModel
                     state.viewer.addModel(data.structure, data.filetype);
                 }
@@ -58,9 +67,16 @@ class Mol3DViewer(ReactiveHTML):
                 
                 // Debug: Check loaded models
                 const models = state.viewer.getModels();
-                console.log('Models loaded after render:', models.length);
+                console.log('🧬 RENDER: Models loaded after render:', models.length);
                 if (models.length > 0 && data.total_frames > 1) {
-                    console.log('Model has frames:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
+                    console.log('🧬 RENDER: Model has frames:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
+                    // Try to get frame count if available
+                    try {
+                        const frameCount = models[0].getFrames();
+                        console.log('🧬 RENDER: Actual frame count from model:', frameCount);
+                    } catch (e) {
+                        console.log('🧬 RENDER: Cannot get frame count:', e.message);
+                    }
                 }
             }
         """,
@@ -69,14 +85,23 @@ class Mol3DViewer(ReactiveHTML):
             if (state.viewer) {
                 state.viewer.clear();
                 if (data.structure) {
-                    console.log('Updating structure with', data.total_frames, 'frames');
+                    console.log('🧬 Updating structure with', data.total_frames, 'frames');
+                    console.log('🧬 Structure length:', data.structure.length, 'characters');
+                    
                     // Check if this is multi-frame data
                     if (data.total_frames > 1) {
-                        console.log('Using addModelsAsFrames for multi-frame structure update');
-                        // Use addModelsAsFrames for multi-frame structures
-                        state.viewer.addModelsAsFrames(data.structure, data.filetype);
+                        console.log('🧬 Using addModelsAsFrames for multi-frame structure update');
+                        try {
+                            // Use addModelsAsFrames for multi-frame structures
+                            state.viewer.addModelsAsFrames(data.structure, data.filetype);
+                            console.log('🧬 addModelsAsFrames completed successfully');
+                        } catch (err) {
+                            console.error('🧬 Error in addModelsAsFrames:', err);
+                            console.log('🧬 Falling back to single model...');
+                            state.viewer.addModel(data.structure, data.filetype);
+                        }
                     } else {
-                        console.log('Using addModel for single frame update');
+                        console.log('🧬 Using addModel for single frame update');
                         // Single frame - use regular addModel
                         state.viewer.addModel(data.structure, data.filetype);
                     }
@@ -100,9 +125,16 @@ class Mol3DViewer(ReactiveHTML):
                     
                     // Debug: Check loaded models after structure update
                     const models = state.viewer.getModels();
-                    console.log('Models loaded after structure update:', models.length);
+                    console.log('🧬 Models loaded after structure update:', models.length);
                     if (models.length > 0 && data.total_frames > 1) {
-                        console.log('Model frames after update:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
+                        console.log('🧬 Model frames after update:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
+                        // Try to get frame count if available
+                        try {
+                            const frameCount = models[0].getFrames();
+                            console.log('🧬 Actual frame count from model:', frameCount);
+                        } catch (e) {
+                            console.log('🧬 Cannot get frame count:', e.message);
+                        }
                     }
                     
                     // Handle labels after structure is loaded
@@ -377,23 +409,34 @@ class Mol3DViewer(ReactiveHTML):
         
         "current_frame": """
             if (state.viewer && data.total_frames > 1) {
-                console.log('Setting frame to:', data.current_frame, 'of', data.total_frames);
+                console.log('🎬 Setting frame to:', data.current_frame, 'of', data.total_frames);
+                
                 // Check if we have models loaded
                 const models = state.viewer.getModels();
-                console.log('Number of models loaded:', models.length);
-                if (models.length > 0) {
-                    console.log('Model frames available:', models[0].getFrames ? models[0].getFrames() : 'getFrames not available');
-                }
+                console.log('🎬 Number of models loaded:', models.length);
                 
-                // Use 3Dmol.js setFrame method for multi-frame structures
-                state.viewer.setFrame(data.current_frame).then(() => {
-                    state.viewer.render();
-                    console.log('Frame set and rendered:', data.current_frame);
-                }).catch(err => {
-                    console.error('Error setting frame:', err);
-                    console.log('Trying fallback render...');
-                    state.viewer.render();
-                });
+                if (models.length > 0) {
+                    console.log('🎬 Model frames available:', models[0].getFrames ? models[0].getFrames() : 'getFrames not available');
+                    
+                    try {
+                        // 3Dmol.js setFrame is synchronous, not a Promise
+                        console.log('🎬 Calling setFrame(' + data.current_frame + ')');
+                        state.viewer.setFrame(data.current_frame);
+                        console.log('🎬 setFrame completed, now rendering...');
+                        
+                        state.viewer.render();
+                        console.log('🎬 Frame set and rendered successfully:', data.current_frame);
+                        
+                    } catch (err) {
+                        console.error('🎬 Error setting frame:', err);
+                        console.log('🎬 Trying fallback render...');
+                        state.viewer.render();
+                    }
+                } else {
+                    console.warn('🎬 No models loaded, cannot set frame');
+                }
+            } else {
+                console.log('🎬 Skipping frame update - viewer:', !!state.viewer, 'total_frames:', data.total_frames);
             }
         """,
         

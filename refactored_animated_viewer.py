@@ -11,31 +11,19 @@ import pandas as pd
 from panel_3dmol import Mol3DViewer
 import warnings
 import os
+import asyncio
 
-# Suppress BokehWarnings using official Bokeh methods
-os.environ['BOKEH_LOG_LEVEL'] = 'error'
+# Enable all warnings for debugging
+os.environ['BOKEH_LOG_LEVEL'] = 'debug'
 import logging
-logging.getLogger('bokeh').setLevel(logging.ERROR)
+logging.getLogger('bokeh').setLevel(logging.DEBUG)
+logging.getLogger('panel').setLevel(logging.DEBUG)
+logging.getLogger('param').setLevel(logging.DEBUG)
 
-# Additional warning suppression
-warnings.filterwarnings('ignore', category=UserWarning, module='bokeh')
-warnings.filterwarnings('ignore', message='.*bokeh.*')
-warnings.filterwarnings('ignore', message='.*width-responsive sizing_mode.*')
-warnings.filterwarnings('ignore', category=UserWarning, module='param')
+# Enable all warnings to see what's happening
+warnings.filterwarnings('default')  # Show all warnings
 
-# Bokeh validation silence
-try:
-    from bokeh.core.validation import silence
-    from bokeh.core.validation.warnings import MISSING_RENDERERS
-    silence(MISSING_RENDERERS, True)
-except ImportError:
-    pass
-
-try:
-    import bokeh.core.validation as validation
-    validation.silence_all_warnings()
-except (ImportError, AttributeError):
-    pass
+print("🔧 DEBUG MODE ENABLED - All warnings and logs will be shown")
 
 # Enable Panel extensions
 pn.extension('plotly')
@@ -145,10 +133,10 @@ class AnimatedMolecularViewer(param.Parameterized):
             # Set to first frame
             self.mol_viewer.setFrame(0)
         
-        # Animation control state
+        # Animation control state  
+        self._animation_active = False
         self._animation_callback = None
         self._animation_direction = 1  # 1 for forward, -1 for backward
-        self._last_update_time = 0
         self._updating_from_panel = False
         
         # Create UI components
@@ -162,6 +150,9 @@ class AnimatedMolecularViewer(param.Parameterized):
         self.param.watch(self.on_animation_control, ['is_playing', 'animation_speed', 'loop_mode'])
         self.param.watch(self.on_display_change, ['show_stick', 'show_sphere'])
         
+        # Create reactive function using pn.bind for automatic GUI updates
+        self.reactive_frame_updater = pn.bind(self.update_molecular_viewer, self.param.current_frame)
+        
         # Watch mol_viewer frame changes (for external updates)
         self.mol_viewer.param.watch(self.on_mol_viewer_frame_change, 'current_frame')
         
@@ -171,6 +162,46 @@ class AnimatedMolecularViewer(param.Parameterized):
         """Handle frame changes from the mol_viewer (for bidirectional sync)"""
         if event.new != self.current_frame and not self._updating_from_panel:
             self.current_frame = event.new
+    
+    def update_molecular_viewer(self, frame_id):
+        """Reactive function to update molecular viewer (called via pn.bind)"""
+        print(f"🔄 REACTIVE UPDATE started: frame {frame_id}")
+        
+        try:
+            # Update molecular viewer frame
+            print(f"🔄 Calling mol_viewer.setFrame({frame_id})")
+            self.mol_viewer.setFrame(frame_id)
+            
+            # Also update the mol_viewer's current_frame parameter to keep it in sync
+            if hasattr(self.mol_viewer, 'current_frame'):
+                print(f"🔄 Setting mol_viewer.current_frame = {frame_id}")
+                self.mol_viewer.current_frame = frame_id
+            
+            # Force render to ensure the frame change is visible
+            print(f"🔄 Calling mol_viewer.render()")
+            self.mol_viewer.render()
+            
+            # Force parameter trigger to ensure JavaScript update
+            print(f"🔄 Triggering mol_viewer.param.trigger('current_frame')")
+            self.mol_viewer.param.trigger('current_frame')
+            
+            # Update info panel
+            print(f"🔄 Updating info panel")
+            self.info_panel.object = self.get_frame_info_html(frame_id)
+            
+            # Update energy plot marker
+            print(f"🔄 Updating energy plot")
+            self.update_energy_plot()
+            
+            print(f"🔄 REACTIVE UPDATE completed successfully: frame {frame_id}")
+            
+        except Exception as e:
+            print(f"🔄 ERROR in reactive update: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Return something to indicate completion
+        return f"Frame {frame_id}"
     
     def apply_molecular_style(self):
         """Apply current molecular styling"""
@@ -342,6 +373,8 @@ class AnimatedMolecularViewer(param.Parameterized):
         """Handle frame changes - update mol_viewer and energy plot"""
         frame_id = event.new
         
+        print(f"on_frame_change called: {event.old} -> {frame_id} (from animation: {hasattr(self, '_in_animation')})")
+        
         # Flag to prevent feedback loops
         self._updating_from_panel = True
         
@@ -408,20 +441,30 @@ class AnimatedMolecularViewer(param.Parameterized):
     
     def on_animation_control(self, event):
         """Handle animation control changes - Panel-controlled animation"""
+        print(f"🎮 ANIMATION CONTROL: {event.name} changed from {event.old} to {event.new}")
+        print(f"🎮 Current state: is_playing={self.is_playing}, _animation_active={self._animation_active}")
+        
         if event.name == 'is_playing':
+            print(f"🎮 Play/Pause button pressed: {event.new}")
             if event.new:
+                print("🎮 Starting animation...")
                 self.start_panel_animation()
             else:
+                print("🎮 Stopping animation...")
                 self.stop_panel_animation()
         elif event.name == 'animation_speed':
+            print(f"🎮 Animation speed changed to: {event.new}ms")
             # Restart animation with new speed if playing
             if self.is_playing:
+                print("🎮 Restarting animation with new speed...")
                 self.stop_panel_animation()
                 self.start_panel_animation()
         elif event.name == 'loop_mode':
             # Reset direction for loop mode changes
             self._animation_direction = 1
-            print(f"Loop mode changed to: {event.new}")
+            print(f"🎮 Loop mode changed to: {event.new}")
+            
+        print(f"🎮 Final state: is_playing={self.is_playing}, _animation_active={self._animation_active}")
     
     def on_display_change(self, event):
         """Handle display option changes"""
@@ -438,25 +481,114 @@ class AnimatedMolecularViewer(param.Parameterized):
                 print(f"Clicked on energy plot, jumping to frame: {frame_id}")
     
     def start_panel_animation(self):
-        """Start Panel-controlled animation using periodic callbacks"""
-        if self._animation_callback is None:
-            self._animation_callback = pn.state.add_periodic_callback(
-                self.advance_frame, 
-                self.animation_speed
-            )
-            print(f"Started Panel animation at {self.animation_speed}ms intervals, mode: {self.loop_mode}")
-            print(f"Current frame: {self.current_frame}, Total frames: {num_frames}")
+        """Start animation using Panel's periodic callback - simplified approach"""
+        print(f"🚀 START_PANEL_ANIMATION called")
+        print(f"🚀 _animation_active={self._animation_active}, is_playing={self.is_playing}")
+        
+        if not self._animation_active:
+            self._animation_active = True
+            print(f"🚀 Setting _animation_active=True")
+            print(f"🚀 Started Panel animation at {self.animation_speed}ms intervals, mode: {self.loop_mode}")
+            print(f"🚀 Current frame: {self.current_frame}, Total frames: {num_frames}")
+            
+            # Simple animation step function with proper exception handling
+            def animation_step():
+                try:
+                    print(f"⏰ ANIMATION STEP called - _animation_active={self._animation_active}, is_playing={self.is_playing}")
+                    
+                    if not (self._animation_active and self.is_playing):
+                        print(f"⏰ STOPPING animation - _animation_active={self._animation_active}, is_playing={self.is_playing}")
+                        return False  # Stop the callback
+                    
+                    # Calculate next frame
+                    old_frame = self.current_frame
+                    print(f"⏰ Current frame before update: {old_frame}")
+                    
+                    if self.loop_mode == "forward":
+                        next_frame = (self.current_frame + 1) % num_frames
+                    elif self.loop_mode == "backward":
+                        next_frame = (self.current_frame - 1) % num_frames
+                    elif self.loop_mode == "pingpong":
+                        next_frame = self.current_frame + self._animation_direction
+                        if next_frame >= num_frames - 1:
+                            next_frame = num_frames - 1
+                            self._animation_direction = -1
+                        elif next_frame <= 0:
+                            next_frame = 0
+                            self._animation_direction = 1
+                    
+                    print(f"⏰ Calculated next frame: {next_frame}")
+                    
+                    # Update frame directly without reactive function for now
+                    self.current_frame = next_frame
+                    print(f"⏰ Set current_frame to: {self.current_frame}")
+                    
+                    # Update the molecular viewer properly to trigger JavaScript
+                    try:
+                        print(f"⏰ Updating molecular viewer to frame {next_frame}")
+                        
+                        # First set the parameter
+                        self.mol_viewer.current_frame = next_frame
+                        print(f"⏰ Set mol_viewer.current_frame = {next_frame}")
+                        
+                        # Then trigger the parameter to ensure JavaScript is called
+                        self.mol_viewer.param.trigger('current_frame')
+                        print(f"⏰ Triggered current_frame parameter")
+                        
+                        print(f"⏰ Molecular viewer update successful")
+                    except Exception as e:
+                        print(f"⏰ ERROR in molecular viewer update: {e}")
+                        import traceback
+                        traceback.print_exc()
+                    
+                    print(f"⏰ Animation step: {old_frame} -> {next_frame} (mode: {self.loop_mode})")
+                    
+                    return True  # Continue animation
+                    
+                except Exception as e:
+                    print(f"⏰ CRITICAL ERROR in animation_step: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    self._animation_active = False
+                    return False  # Stop animation due to error
+            
+            # Start the periodic callback
+            try:
+                print(f"🚀 Creating periodic callback with period={self.animation_speed}")
+                self._animation_callback = pn.state.add_periodic_callback(
+                    animation_step, period=self.animation_speed
+                )
+                print(f"🚀 Periodic callback created successfully: {self._animation_callback}")
+            except Exception as e:
+                print(f"🚀 ERROR creating periodic callback: {e}")
+        else:
+            print(f"🚀 Animation already active, not starting again")
     
     def stop_panel_animation(self):
         """Stop Panel-controlled animation"""
-        if self._animation_callback is not None:
-            self._animation_callback.stop()
-            self._animation_callback = None
-            print("Stopped Panel animation")
+        print(f"🛑 STOP_PANEL_ANIMATION called")
+        print(f"🛑 Before: _animation_active={self._animation_active}, _animation_callback={getattr(self, '_animation_callback', 'None')}")
+        
+        self._animation_active = False
+        
+        if hasattr(self, '_animation_callback') and self._animation_callback:
+            try:
+                print(f"🛑 Stopping callback: {self._animation_callback}")
+                self._animation_callback.stop()
+                self._animation_callback = None
+                print(f"🛑 Callback stopped successfully")
+            except Exception as e:
+                print(f"🛑 ERROR stopping callback: {e}")
+        else:
+            print(f"🛑 No callback to stop")
+            
+        print(f"🛑 After: _animation_active={self._animation_active}, _animation_callback={getattr(self, '_animation_callback', 'None')}")
+        print("🛑 Stopped Panel animation")
     
     def advance_frame(self):
         """Advance to next frame based on loop mode (called by Panel periodic callback)"""
         old_frame = self.current_frame
+        self._in_animation = True
         
         if self.loop_mode == "forward":
             next_frame = (self.current_frame + 1) % num_frames
@@ -475,6 +607,7 @@ class AnimatedMolecularViewer(param.Parameterized):
                 self._animation_direction = 1
         
         self.current_frame = next_frame
+        self._in_animation = False
         print(f"Animation: {old_frame} -> {next_frame} (mode: {self.loop_mode}) [{next_frame}/{num_frames-1}]")
     
     def create_dashboard(self):
