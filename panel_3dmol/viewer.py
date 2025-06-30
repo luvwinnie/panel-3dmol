@@ -23,6 +23,12 @@ class Mol3DViewer(ReactiveHTML):
     labels = param.List(default=[], doc="List of labels to display")
     show_atom_labels = param.Boolean(default=False, doc="Automatically show atom indices")
     
+    # Animation parameters
+    current_frame = param.Integer(default=0, bounds=(0, None), doc="Current animation frame")
+    total_frames = param.Integer(default=1, bounds=(1, None), doc="Total number of frames")
+    animate = param.Boolean(default=False, doc="Enable/disable animation")
+    animation_speed = param.Number(default=100, bounds=(1, 10000), doc="Animation speed in milliseconds")
+    
     # HTML template (simple and supports multiple instances)
     _template = """
     <div id="viewer" style="width: 100%; height: 400px; border: 1px solid #ddd;"></div>
@@ -332,6 +338,72 @@ class Mol3DViewer(ReactiveHTML):
                 
                 state.viewer.render();
             }
+        """,
+        
+        "current_frame": """
+            if (state.viewer) {
+                // Set the current frame using 3Dmol.js setFrame
+                if (data.total_frames > 1) {
+                    state.viewer.setFrame(data.current_frame);
+                    state.viewer.render();
+                }
+            }
+        """,
+        
+        "animate": """
+            if (state.viewer) {
+                if (data.animate && data.total_frames > 1) {
+                    // Start animation
+                    if (!state.animationInterval) {
+                        state.animationInterval = setInterval(() => {
+                            // Get current frame and increment
+                            const nextFrame = (data.current_frame + 1) % data.total_frames;
+                            
+                            // Update the Python side by triggering parameter change
+                            // Note: This creates a feedback loop that updates current_frame
+                            if (state.viewer) {
+                                state.viewer.setFrame(nextFrame);
+                                state.viewer.render();
+                            }
+                        }, data.animation_speed);
+                    }
+                } else {
+                    // Stop animation
+                    if (state.animationInterval) {
+                        clearInterval(state.animationInterval);
+                        state.animationInterval = null;
+                    }
+                }
+            }
+        """,
+        
+        "animation_speed": """
+            if (state.viewer && state.animationInterval) {
+                // Restart animation with new speed
+                clearInterval(state.animationInterval);
+                state.animationInterval = null;
+                
+                if (data.animate && data.total_frames > 1) {
+                    state.animationInterval = setInterval(() => {
+                        const nextFrame = (data.current_frame + 1) % data.total_frames;
+                        if (state.viewer) {
+                            state.viewer.setFrame(nextFrame);
+                            state.viewer.render();
+                        }
+                    }, data.animation_speed);
+                }
+            }
+        """,
+        
+        "total_frames": """
+            if (state.viewer) {
+                // Update frame bounds when total frames changes
+                if (data.current_frame >= data.total_frames) {
+                    // Reset to first frame if current frame is out of bounds
+                    state.viewer.setFrame(0);
+                    state.viewer.render();
+                }
+            }
         """
     }
     
@@ -467,6 +539,61 @@ class Mol3DViewer(ReactiveHTML):
                         'inFront': True
                     })
         
+        return self
+    
+    def setFrame(self, frame):
+        """Set the current animation frame (py3dmol compatible)"""
+        if 0 <= frame < self.total_frames:
+            self.current_frame = frame
+        return self
+    
+    def getFrame(self):
+        """Get the current animation frame (py3dmol compatible)"""
+        return self.current_frame
+    
+    def startAnimation(self, speed=None):
+        """Start animation playback (py3dmol compatible)"""
+        if speed is not None:
+            self.animation_speed = speed
+        self.animate = True
+        return self
+    
+    def stopAnimation(self):
+        """Stop animation playback (py3dmol compatible)"""
+        self.animate = False
+        return self
+    
+    def setAnimationSpeed(self, speed):
+        """Set animation speed in milliseconds (py3dmol compatible)"""
+        self.animation_speed = speed
+        return self
+    
+    def addFrames(self, structures, filetype=None):
+        """Add multiple structures as animation frames"""
+        if filetype is None:
+            filetype = self.filetype
+            
+        if isinstance(structures, list):
+            # Multiple structures - create multi-frame content
+            if filetype == 'xyz':
+                # Combine XYZ structures into single multi-frame XYZ
+                combined = ""
+                for structure in structures:
+                    combined += structure.strip() + "\n"
+                self.structure = combined
+            else:
+                # For other formats, just use the first structure for now
+                # TODO: Implement proper multi-frame support for PDB/SDF
+                self.structure = structures[0] if structures else ""
+            
+            self.total_frames = len(structures)
+            self.current_frame = 0
+        else:
+            # Single structure
+            self.structure = structures
+            self.total_frames = 1
+            self.current_frame = 0
+            
         return self
 
 # Factory function for easier usage (py3dmol compatible)
