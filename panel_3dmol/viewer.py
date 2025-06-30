@@ -30,12 +30,18 @@ class Mol3DViewer(ReactiveHTML):
     animation_speed = param.Number(default=100, bounds=(1, 10000), doc="Animation speed in milliseconds")
     
     
-    # HTML template (simple and supports multiple instances)
+    # HTML template with reactive frame display
     _template = """
     <div id="viewer" style="width: 100%; height: 400px; border: 1px solid #ddd;"></div>
+    <div id="frame-debug" style="font-size: 12px; color: blue; padding: 2px;">
+        Frame: ${current_frame} / ${total_frames}
+    </div>
+    <script>
+        console.log('🎯 Template loaded! Current frame:', ${current_frame});
+    </script>
     """
     
-    # JavaScript for 3Dmol.js integration (simple working pattern)
+    # JavaScript for 3Dmol.js integration (correct Panel ReactiveHTML syntax)
     _scripts = {
         "render": """
             const viewerDiv = viewer;
@@ -447,7 +453,13 @@ class Mol3DViewer(ReactiveHTML):
         """,
         
         "current_frame": """
-            console.log('🎬 CURRENT_FRAME SCRIPT TRIGGERED! Frame:', data.current_frame, 'of', data.total_frames);
+            console.log('🎬 REACTIVE CURRENT_FRAME TRIGGERED! Frame:', data.current_frame, 'of', data.total_frames);
+            
+            // Update the debug display
+            const debugDiv = document.getElementById('frame-debug');
+            if (debugDiv) {
+                debugDiv.textContent = 'Frame: ' + data.current_frame + ' / ' + data.total_frames;
+            }
             
             if (state.viewer) {
                 console.log('🎬 Viewer exists, attempting frame update...');
@@ -459,41 +471,30 @@ class Mol3DViewer(ReactiveHTML):
                     if (typeof state.viewer.setFrame === 'function') {
                         state.viewer.setFrame(data.current_frame);
                         console.log('🎬 setFrame completed successfully');
+                        
+                        // Always render after frame change
+                        if (typeof state.viewer.render === 'function') {
+                            state.viewer.render();
+                            console.log('🎬 Render completed for frame:', data.current_frame);
+                        }
+                        
+                        console.log('🎬 ✅ Frame update SUCCESSFUL:', data.current_frame);
+                        
                     } else {
                         console.warn('🎬 setFrame method not available on viewer');
                     }
                     
-                    // Always render after frame change
-                    if (typeof state.viewer.render === 'function') {
-                        state.viewer.render();
-                        console.log('🎬 Render completed for frame:', data.current_frame);
-                    } else {
-                        console.warn('🎬 render method not available');
-                    }
-                    
-                    console.log('🎬 ✅ Frame update SUCCESSFUL:', data.current_frame);
-                    
                 } catch (err) {
                     console.error('🎬 ❌ Error in frame update:', err);
-                    console.log('🎬 Trying fallback render...');
+                    // Try fallback render
                     try {
-                        state.viewer.render();
-                        console.log('🎬 Fallback render completed');
+                        if (state.viewer.render) {
+                            state.viewer.render();
+                            console.log('🎬 Fallback render completed');
+                        }
                     } catch (renderErr) {
                         console.error('🎬 Even fallback render failed:', renderErr);
                     }
-                }
-                
-                // Optional: Debug model information (but don't let it block the frame update)
-                try {
-                    if (typeof state.viewer.getModels === 'function') {
-                        const models = state.viewer.getModels();
-                        console.log('🎬 Debug: Models loaded:', models.length);
-                    } else {
-                        console.log('🎬 Debug: getModels not available');
-                    }
-                } catch (debugErr) {
-                    console.log('🎬 Debug: Model check failed (non-critical):', debugErr.message);
                 }
                 
             } else {
