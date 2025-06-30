@@ -30,15 +30,12 @@ class Mol3DViewer(ReactiveHTML):
     animation_speed = param.Number(default=100, bounds=(1, 10000), doc="Animation speed in milliseconds")
     
     
-    # HTML template with reactive frame display
+    # HTML template (simplified - no multiple template variables)
     _template = """
     <div id="viewer" style="width: 100%; height: 400px; border: 1px solid #ddd;"></div>
     <div id="frame-debug" style="font-size: 12px; color: blue; padding: 2px;">
-        Frame: ${current_frame} / ${total_frames}
+        Frame: <span id="current-frame">0</span> / <span id="total-frames">1</span>
     </div>
-    <script>
-        console.log('🎯 Template loaded! Current frame:', ${current_frame});
-    </script>
     """
     
     # JavaScript for 3Dmol.js integration (correct Panel ReactiveHTML syntax)
@@ -455,10 +452,14 @@ class Mol3DViewer(ReactiveHTML):
         "current_frame": """
             console.log('🎬 REACTIVE CURRENT_FRAME TRIGGERED! Frame:', data.current_frame, 'of', data.total_frames);
             
-            // Update the debug display
-            const debugDiv = document.getElementById('frame-debug');
-            if (debugDiv) {
-                debugDiv.textContent = 'Frame: ' + data.current_frame + ' / ' + data.total_frames;
+            // Update the frame display elements
+            const currentFrameSpan = document.getElementById('current-frame');
+            const totalFramesSpan = document.getElementById('total-frames');
+            if (currentFrameSpan) {
+                currentFrameSpan.textContent = data.current_frame;
+            }
+            if (totalFramesSpan) {
+                totalFramesSpan.textContent = data.total_frames;
             }
             
             if (state.viewer) {
@@ -522,10 +523,19 @@ class Mol3DViewer(ReactiveHTML):
         """,
         
         "total_frames": """
+            console.log('🔢 TOTAL_FRAMES TRIGGERED:', data.total_frames);
+            
+            // Update the total frames display
+            const totalFramesSpan = document.getElementById('total-frames');
+            if (totalFramesSpan) {
+                totalFramesSpan.textContent = data.total_frames;
+            }
+            
             if (state.viewer) {
                 // Update frame bounds when total frames changes
                 if (data.current_frame >= data.total_frames) {
                     // Reset to first frame if current frame is out of bounds
+                    console.log('🔢 Resetting to frame 0 due to bounds');
                     state.viewer.setFrame(0);
                     state.viewer.render();
                 }
