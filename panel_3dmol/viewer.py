@@ -39,7 +39,26 @@ class Mol3DViewer(ReactiveHTML):
     _scripts = {
         "render": """
             const viewerDiv = viewer;
+            
+            // Check if 3Dmol.js is loaded
+            if (typeof $3Dmol === 'undefined') {
+                console.error('🧬 RENDER: 3Dmol.js is not loaded yet, retrying in 100ms...');
+                setTimeout(() => {
+                    if (typeof $3Dmol !== 'undefined') {
+                        console.log('🧬 RENDER: 3Dmol.js loaded on retry');
+                        // Retry the render
+                        state.viewer = $3Dmol.createViewer(viewerDiv, {backgroundColor: data.background_color || "white"});
+                        // ... rest of render logic would go here
+                    } else {
+                        console.error('🧬 RENDER: 3Dmol.js still not loaded after retry');
+                    }
+                }, 100);
+                return;
+            }
+            
             state.viewer = $3Dmol.createViewer(viewerDiv, {backgroundColor: data.background_color || "white"});
+            console.log('🧬 RENDER: 3Dmol viewer created:', !!state.viewer);
+            
             if (data.structure) {
                 console.log('🧬 RENDER: Loading structure with', data.total_frames, 'frames');
                 console.log('🧬 RENDER: Structure length:', data.structure.length, 'characters');
@@ -66,17 +85,27 @@ class Mol3DViewer(ReactiveHTML):
                 state.viewer.render();
                 
                 // Debug: Check loaded models
-                const models = state.viewer.getModels();
-                console.log('🧬 RENDER: Models loaded after render:', models.length);
-                if (models.length > 0 && data.total_frames > 1) {
-                    console.log('🧬 RENDER: Model has frames:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
-                    // Try to get frame count if available
-                    try {
-                        const frameCount = models[0].getFrames();
-                        console.log('🧬 RENDER: Actual frame count from model:', frameCount);
-                    } catch (e) {
-                        console.log('🧬 RENDER: Cannot get frame count:', e.message);
+                try {
+                    if (typeof state.viewer.getModels === 'function') {
+                        const models = state.viewer.getModels();
+                        console.log('🧬 RENDER: Models loaded after render:', models.length);
+                        if (models.length > 0 && data.total_frames > 1) {
+                            console.log('🧬 RENDER: Model has frames:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
+                            // Try to get frame count if available
+                            try {
+                                if (typeof models[0].getFrames === 'function') {
+                                    const frameCount = models[0].getFrames();
+                                    console.log('🧬 RENDER: Actual frame count from model:', frameCount);
+                                }
+                            } catch (e) {
+                                console.log('🧬 RENDER: Cannot get frame count:', e.message);
+                            }
+                        }
+                    } else {
+                        console.log('🧬 RENDER: getModels method not available on viewer');
                     }
+                } catch (e) {
+                    console.error('🧬 RENDER: Error checking models:', e.message);
                 }
             }
         """,
@@ -124,17 +153,27 @@ class Mol3DViewer(ReactiveHTML):
                     state.viewer.zoomTo();
                     
                     // Debug: Check loaded models after structure update
-                    const models = state.viewer.getModels();
-                    console.log('🧬 Models loaded after structure update:', models.length);
-                    if (models.length > 0 && data.total_frames > 1) {
-                        console.log('🧬 Model frames after update:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
-                        // Try to get frame count if available
-                        try {
-                            const frameCount = models[0].getFrames();
-                            console.log('🧬 Actual frame count from model:', frameCount);
-                        } catch (e) {
-                            console.log('🧬 Cannot get frame count:', e.message);
+                    try {
+                        if (typeof state.viewer.getModels === 'function') {
+                            const models = state.viewer.getModels();
+                            console.log('🧬 Models loaded after structure update:', models.length);
+                            if (models.length > 0 && data.total_frames > 1) {
+                                console.log('🧬 Model frames after update:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
+                                // Try to get frame count if available
+                                try {
+                                    if (typeof models[0].getFrames === 'function') {
+                                        const frameCount = models[0].getFrames();
+                                        console.log('🧬 Actual frame count from model:', frameCount);
+                                    }
+                                } catch (e) {
+                                    console.log('🧬 Cannot get frame count:', e.message);
+                                }
+                            }
+                        } else {
+                            console.log('🧬 getModels method not available on viewer');
                         }
+                    } catch (e) {
+                        console.error('🧬 Error checking models:', e.message);
                     }
                     
                     // Handle labels after structure is loaded
@@ -412,28 +451,51 @@ class Mol3DViewer(ReactiveHTML):
                 console.log('🎬 Setting frame to:', data.current_frame, 'of', data.total_frames);
                 
                 // Check if we have models loaded
-                const models = state.viewer.getModels();
-                console.log('🎬 Number of models loaded:', models.length);
-                
-                if (models.length > 0) {
-                    console.log('🎬 Model frames available:', models[0].getFrames ? models[0].getFrames() : 'getFrames not available');
-                    
-                    try {
-                        // 3Dmol.js setFrame is synchronous, not a Promise
-                        console.log('🎬 Calling setFrame(' + data.current_frame + ')');
-                        state.viewer.setFrame(data.current_frame);
-                        console.log('🎬 setFrame completed, now rendering...');
+                try {
+                    if (typeof state.viewer.getModels === 'function') {
+                        const models = state.viewer.getModels();
+                        console.log('🎬 Number of models loaded:', models.length);
                         
-                        state.viewer.render();
-                        console.log('🎬 Frame set and rendered successfully:', data.current_frame);
-                        
-                    } catch (err) {
-                        console.error('🎬 Error setting frame:', err);
-                        console.log('🎬 Trying fallback render...');
-                        state.viewer.render();
+                        if (models.length > 0) {
+                            console.log('🎬 Model frames available:', models[0].getFrames ? models[0].getFrames() : 'getFrames not available');
+                            
+                            try {
+                                // 3Dmol.js setFrame is synchronous, not a Promise
+                                console.log('🎬 Calling setFrame(' + data.current_frame + ')');
+                                if (typeof state.viewer.setFrame === 'function') {
+                                    state.viewer.setFrame(data.current_frame);
+                                    console.log('🎬 setFrame completed, now rendering...');
+                                } else {
+                                    console.warn('🎬 setFrame method not available on viewer');
+                                }
+                                
+                                state.viewer.render();
+                                console.log('🎬 Frame set and rendered successfully:', data.current_frame);
+                                
+                            } catch (err) {
+                                console.error('🎬 Error setting frame:', err);
+                                console.log('🎬 Trying fallback render...');
+                                state.viewer.render();
+                            }
+                        } else {
+                            console.warn('🎬 No models loaded, cannot set frame');
+                        }
+                    } else {
+                        console.log('🎬 getModels method not available, trying direct setFrame...');
+                        try {
+                            if (typeof state.viewer.setFrame === 'function') {
+                                state.viewer.setFrame(data.current_frame);
+                                state.viewer.render();
+                                console.log('🎬 Direct setFrame successful:', data.current_frame);
+                            } else {
+                                console.warn('🎬 setFrame method not available on viewer');
+                            }
+                        } catch (err) {
+                            console.error('🎬 Error with direct setFrame:', err);
+                        }
                     }
-                } else {
-                    console.warn('🎬 No models loaded, cannot set frame');
+                } catch (e) {
+                    console.error('🎬 Error in frame update:', e.message);
                 }
             } else {
                 console.log('🎬 Skipping frame update - viewer:', !!state.viewer, 'total_frames:', data.total_frames);
