@@ -29,6 +29,7 @@ class Mol3DViewer(ReactiveHTML):
     animate = param.Boolean(default=False, doc="Enable/disable animation")
     animation_speed = param.Number(default=100, bounds=(1, 10000), doc="Animation speed in milliseconds")
     
+    
     # HTML template (simple and supports multiple instances)
     _template = """
     <div id="viewer" style="width: 100%; height: 400px; border: 1px solid #ddd;"></div>
@@ -355,16 +356,20 @@ class Mol3DViewer(ReactiveHTML):
                 if (data.animate && data.total_frames > 1) {
                     // Start animation
                     if (!state.animationInterval) {
+                        state.currentFrame = data.current_frame; // Initialize current frame
                         state.animationInterval = setInterval(() => {
                             // Get current frame and increment
-                            const nextFrame = (data.current_frame + 1) % data.total_frames;
+                            state.currentFrame = (state.currentFrame + 1) % data.total_frames;
                             
-                            // Update the Python side by triggering parameter change
-                            // Note: This creates a feedback loop that updates current_frame
+                            // Update 3Dmol viewer
                             if (state.viewer) {
-                                state.viewer.setFrame(nextFrame);
+                                state.viewer.setFrame(state.currentFrame);
                                 state.viewer.render();
                             }
+                            
+                            // Note: For Panel integration, external code should control 
+                            // the animation through Python parameters rather than relying
+                            // on JavaScript-driven frame updates
                         }, data.animation_speed);
                     }
                 } else {
@@ -385,11 +390,14 @@ class Mol3DViewer(ReactiveHTML):
                 
                 if (data.animate && data.total_frames > 1) {
                     state.animationInterval = setInterval(() => {
-                        const nextFrame = (data.current_frame + 1) % data.total_frames;
+                        // Use internal frame counter
+                        state.currentFrame = (state.currentFrame + 1) % data.total_frames;
                         if (state.viewer) {
-                            state.viewer.setFrame(nextFrame);
+                            state.viewer.setFrame(state.currentFrame);
                             state.viewer.render();
                         }
+                        
+                        // JavaScript animation continues independently
                     }, data.animation_speed);
                 }
             }
@@ -415,6 +423,8 @@ class Mol3DViewer(ReactiveHTML):
     def __init__(self, **params):
         super().__init__(**params)
         self._labels_list = []  # Internal storage for labels
+        self._updating_frame = False  # Flag to prevent feedback loops
+        
     
     # py3dmol-compatible API methods
     def addModel(self, data, format):
@@ -544,7 +554,9 @@ class Mol3DViewer(ReactiveHTML):
     def setFrame(self, frame):
         """Set the current animation frame (py3dmol compatible)"""
         if 0 <= frame < self.total_frames:
+            self._updating_frame = True
             self.current_frame = frame
+            self._updating_frame = False
         return self
     
     def getFrame(self):
