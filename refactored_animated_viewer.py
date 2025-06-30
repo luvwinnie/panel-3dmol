@@ -117,8 +117,7 @@ class AnimatedMolecularViewer(param.Parameterized):
             height=600,
             background_color='white',
             show_atom_labels=True,
-            animate=False,  # Use Panel-controlled animation, not built-in
-            animation_speed=self.animation_speed,
+            animate=False,  # CRITICAL: Disable built-in animation completely
             current_frame=0,
             total_frames=num_frames
         )
@@ -150,8 +149,8 @@ class AnimatedMolecularViewer(param.Parameterized):
         self.param.watch(self.on_animation_control, ['is_playing', 'animation_speed', 'loop_mode'])
         self.param.watch(self.on_display_change, ['show_stick', 'show_sphere'])
         
-        # Create reactive function using pn.bind for automatic GUI updates
-        self.reactive_frame_updater = pn.bind(self.update_molecular_viewer, self.param.current_frame)
+        # Disable reactive function to avoid conflicts with animation
+        # self.reactive_frame_updater = pn.bind(self.update_molecular_viewer, self.param.current_frame)
         
         # Watch mol_viewer frame changes (for external updates)
         self.mol_viewer.param.watch(self.on_mol_viewer_frame_change, 'current_frame')
@@ -378,18 +377,9 @@ class AnimatedMolecularViewer(param.Parameterized):
         # Flag to prevent feedback loops
         self._updating_from_panel = True
         
-        # Update molecular viewer frame using panel-3dmol's setFrame
-        self.mol_viewer.setFrame(frame_id)
-        
-        # Also update the mol_viewer's current_frame parameter to keep it in sync
+        # CRITICAL: Only update the current_frame parameter, let ReactiveHTML handle the rest
         if hasattr(self.mol_viewer, 'current_frame'):
             self.mol_viewer.current_frame = frame_id
-        
-        # Force render to ensure the frame change is visible
-        self.mol_viewer.render()
-        
-        # Force parameter trigger to ensure JavaScript update
-        self.mol_viewer.param.trigger('current_frame')
         
         # Update info panel
         self.info_panel.object = self.get_frame_info_html(frame_id)
@@ -523,28 +513,20 @@ class AnimatedMolecularViewer(param.Parameterized):
                     self.current_frame = next_frame
                     print(f"⏰ Set current_frame to: {self.current_frame}")
                     
-                    # Update the molecular viewer properly to trigger JavaScript
+                    # Update UI components - let the on_frame_change handler do the molecular viewer update
                     try:
-                        print(f"⏰ Updating molecular viewer to frame {next_frame}")
+                        print(f"⏰ Updating UI components for frame {next_frame}")
                         
-                        # CRITICAL: Directly set mol_viewer current_frame and trigger ALL parameters
-                        # This ensures the JavaScript current_frame script gets executed
-                        old_frame = self.mol_viewer.current_frame
-                        self.mol_viewer.current_frame = next_frame
-                        print(f"⏰ Set mol_viewer.current_frame: {old_frame} -> {next_frame}")
+                        # Update info panel
+                        self.info_panel.object = self.get_frame_info_html(next_frame)
                         
-                        # Force trigger ALL reactive scripts to ensure JavaScript execution
-                        print(f"⏰ Triggering all parameters to force JavaScript execution...")
-                        self.mol_viewer.param.trigger('current_frame')
-                        self.mol_viewer.param.trigger('total_frames')  # Extra trigger
+                        # Update energy plot
+                        self.update_energy_plot()
                         
-                        # Alternative: also trigger a different parameter to force update
-                        self.mol_viewer.param.trigger('animate')
-                        
-                        print(f"⏰ All parameter triggers completed")
+                        print(f"⏰ UI components updated successfully")
                         
                     except Exception as e:
-                        print(f"⏰ ERROR in molecular viewer update: {e}")
+                        print(f"⏰ ERROR in UI update: {e}")
                         import traceback
                         traceback.print_exc()
                     

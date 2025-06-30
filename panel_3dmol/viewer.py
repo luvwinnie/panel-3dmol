@@ -506,19 +506,68 @@ class Mol3DViewer(ReactiveHTML):
         "animate": """
             if (state.viewer && data.total_frames > 1) {
                 if (data.animate) {
-                    console.log('Animation enabled - using Panel-controlled animation');
-                    // Panel controls the animation, we just need to be ready
-                    // The actual frame updates come through current_frame parameter
+                    console.log('🎬 STARTING 3Dmol.js native animation');
+                    
+                    // Use 3Dmol.js built-in animate method
+                    try {
+                        const animateOptions = {
+                            loop: 'forward',  // Will be controlled by Panel
+                            interval: data.animation_speed || 200,
+                            reps: 0  // Infinite loop
+                        };
+                        
+                        console.log('🎬 Calling viewer.animate() with options:', animateOptions);
+                        state.viewer.animate(animateOptions);
+                        console.log('🎬 3Dmol.js animation started successfully');
+                        
+                        // Store animation state
+                        state.animating = true;
+                        
+                    } catch (err) {
+                        console.error('🎬 Error starting 3Dmol.js animation:', err);
+                    }
                 } else {
-                    console.log('Animation disabled');
+                    console.log('🎬 STOPPING 3Dmol.js animation');
+                    
+                    // Stop 3Dmol.js animation
+                    try {
+                        if (state.viewer.stopAnimate) {
+                            state.viewer.stopAnimate();
+                            console.log('🎬 3Dmol.js animation stopped');
+                        }
+                        if (state.viewer.pauseAnimate) {
+                            state.viewer.pauseAnimate();
+                            console.log('🎬 3Dmol.js animation paused');
+                        }
+                        state.animating = false;
+                    } catch (err) {
+                        console.error('🎬 Error stopping 3Dmol.js animation:', err);
+                    }
                 }
             }
         """,
         
         "animation_speed": """
-            if (state.viewer) {
-                console.log('Animation speed changed to:', data.animation_speed, 'ms');
-                // Panel controls the animation speed, no action needed here
+            if (state.viewer && state.animating) {
+                console.log('🎬 Animation speed changed to:', data.animation_speed, 'ms');
+                
+                // Restart animation with new speed
+                try {
+                    if (state.viewer.stopAnimate) {
+                        state.viewer.stopAnimate();
+                    }
+                    
+                    const animateOptions = {
+                        loop: 'forward',
+                        interval: data.animation_speed,
+                        reps: 0
+                    };
+                    
+                    state.viewer.animate(animateOptions);
+                    console.log('🎬 Animation restarted with new speed');
+                } catch (err) {
+                    console.error('🎬 Error updating animation speed:', err);
+                }
             }
         """,
         
@@ -692,8 +741,8 @@ class Mol3DViewer(ReactiveHTML):
         """Get the current animation frame (py3dmol compatible)"""
         return self.current_frame
     
-    def startAnimation(self, speed=None):
-        """Start animation playback (py3dmol compatible)"""
+    def startAnimation(self, speed=None, loop_mode="forward"):
+        """Start 3Dmol.js native animation (py3dmol compatible)"""
         if speed is not None:
             self.animation_speed = speed
         self.animate = True
