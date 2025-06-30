@@ -523,11 +523,39 @@ class Mol3DViewer(ReactiveHTML):
                         // Store animation state
                         state.animating = true;
                         
+                        // Start frame sync polling to update Python parameters
+                        state.sync_interval = setInterval(() => {
+                            if (state.viewer && state.animating) {
+                                try {
+                                    // Get current frame from 3Dmol.js
+                                    if (typeof state.viewer.getFrame === 'function') {
+                                        const currentFrame = state.viewer.getFrame();
+                                        console.log('🔄 3Dmol.js current frame:', currentFrame);
+                                        
+                                        // Update Python parameter via data object
+                                        if (data.current_frame !== currentFrame) {
+                                            data.current_frame = currentFrame;
+                                            console.log('🔄 Updated Python current_frame to:', currentFrame);
+                                        }
+                                    }
+                                } catch (err) {
+                                    console.log('🔄 Frame sync error (normal):', err.message);
+                                }
+                            }
+                        }, Math.min(data.animation_speed / 2, 100));  // Poll at higher frequency than animation
+                        
                     } catch (err) {
                         console.error('🎬 Error starting 3Dmol.js animation:', err);
                     }
                 } else {
                     console.log('🎬 STOPPING 3Dmol.js animation');
+                    
+                    // Stop frame sync polling
+                    if (state.sync_interval) {
+                        clearInterval(state.sync_interval);
+                        state.sync_interval = null;
+                        console.log('🔄 Stopped frame sync polling');
+                    }
                     
                     // Stop 3Dmol.js animation
                     try {
@@ -551,6 +579,12 @@ class Mol3DViewer(ReactiveHTML):
             if (state.viewer && state.animating) {
                 console.log('🎬 Animation speed changed to:', data.animation_speed, 'ms');
                 
+                // Restart frame sync with new speed
+                if (state.sync_interval) {
+                    clearInterval(state.sync_interval);
+                    state.sync_interval = null;
+                }
+                
                 // Restart animation with new speed
                 try {
                     if (state.viewer.stopAnimate) {
@@ -565,6 +599,24 @@ class Mol3DViewer(ReactiveHTML):
                     
                     state.viewer.animate(animateOptions);
                     console.log('🎬 Animation restarted with new speed');
+                    
+                    // Restart frame sync with new speed
+                    state.sync_interval = setInterval(() => {
+                        if (state.viewer && state.animating) {
+                            try {
+                                if (typeof state.viewer.getFrame === 'function') {
+                                    const currentFrame = state.viewer.getFrame();
+                                    if (data.current_frame !== currentFrame) {
+                                        data.current_frame = currentFrame;
+                                        console.log('🔄 Speed change - Updated current_frame to:', currentFrame);
+                                    }
+                                }
+                            } catch (err) {
+                                console.log('🔄 Frame sync error (normal):', err.message);
+                            }
+                        }
+                    }, Math.min(data.animation_speed / 2, 100));
+                    
                 } catch (err) {
                     console.error('🎬 Error updating animation speed:', err);
                 }
