@@ -450,8 +450,6 @@ class Mol3DViewer(ReactiveHTML):
         """,
         
         "current_frame": """
-            console.log('🎬 REACTIVE CURRENT_FRAME TRIGGERED! Frame:', data.current_frame, 'of', data.total_frames);
-            
             // Update the frame display elements
             const currentFrameSpan = document.getElementById('current-frame');
             const totalFramesSpan = document.getElementById('total-frames');
@@ -463,113 +461,78 @@ class Mol3DViewer(ReactiveHTML):
             }
             
             if (state.viewer) {
-                console.log('🎬 Viewer exists, attempting frame update...');
-                
-                // ALWAYS try to set frame regardless of getModels availability
                 try {
-                    console.log('🎬 Calling setFrame(' + data.current_frame + ')');
-                    
                     if (typeof state.viewer.setFrame === 'function') {
                         state.viewer.setFrame(data.current_frame);
-                        console.log('🎬 setFrame completed successfully');
                         
-                        // Always render after frame change
                         if (typeof state.viewer.render === 'function') {
                             state.viewer.render();
-                            console.log('🎬 Render completed for frame:', data.current_frame);
                         }
-                        
-                        console.log('🎬 ✅ Frame update SUCCESSFUL:', data.current_frame);
-                        
-                    } else {
-                        console.warn('🎬 setFrame method not available on viewer');
                     }
-                    
                 } catch (err) {
-                    console.error('🎬 ❌ Error in frame update:', err);
                     // Try fallback render
                     try {
                         if (state.viewer.render) {
                             state.viewer.render();
-                            console.log('🎬 Fallback render completed');
                         }
                     } catch (renderErr) {
-                        console.error('🎬 Even fallback render failed:', renderErr);
+                        console.error('Frame update failed:', renderErr);
                     }
                 }
-                
-            } else {
-                console.error('🎬 ❌ NO VIEWER - cannot update frame');
             }
         """,
         
         "animate": """
             if (state.viewer && data.total_frames > 1) {
                 if (data.animate) {
-                    console.log('🎬 STARTING 3Dmol.js native animation');
-                    
                     // Use 3Dmol.js built-in animate method
                     try {
                         const animateOptions = {
-                            loop: 'forward',  // Will be controlled by Panel
+                            loop: 'forward',
                             interval: data.animation_speed || 200,
                             reps: 0  // Infinite loop
                         };
                         
-                        console.log('🎬 Calling viewer.animate() with options:', animateOptions);
                         state.viewer.animate(animateOptions);
-                        console.log('🎬 3Dmol.js animation started successfully');
-                        
-                        // Store animation state
                         state.animating = true;
                         
                         // Start frame sync polling to update Python parameters
                         state.sync_interval = setInterval(() => {
                             if (state.viewer && state.animating) {
                                 try {
-                                    // Get current frame from 3Dmol.js
                                     if (typeof state.viewer.getFrame === 'function') {
                                         const currentFrame = state.viewer.getFrame();
-                                        console.log('🔄 3Dmol.js current frame:', currentFrame);
-                                        
-                                        // Update Python parameter via data object
                                         if (data.current_frame !== currentFrame) {
                                             data.current_frame = currentFrame;
-                                            console.log('🔄 Updated Python current_frame to:', currentFrame);
                                         }
                                     }
                                 } catch (err) {
-                                    console.log('🔄 Frame sync error (normal):', err.message);
+                                    // Frame sync errors are expected during transitions
                                 }
                             }
-                        }, Math.min(data.animation_speed / 2, 100));  // Poll at higher frequency than animation
+                        }, Math.min(data.animation_speed / 2, 100));
                         
                     } catch (err) {
-                        console.error('🎬 Error starting 3Dmol.js animation:', err);
+                        console.error('Error starting 3Dmol.js animation:', err);
                     }
                 } else {
-                    console.log('🎬 STOPPING 3Dmol.js animation');
-                    
                     // Stop frame sync polling
                     if (state.sync_interval) {
                         clearInterval(state.sync_interval);
                         state.sync_interval = null;
-                        console.log('🔄 Stopped frame sync polling');
                     }
                     
                     // Stop 3Dmol.js animation
                     try {
                         if (state.viewer.stopAnimate) {
                             state.viewer.stopAnimate();
-                            console.log('🎬 3Dmol.js animation stopped');
                         }
                         if (state.viewer.pauseAnimate) {
                             state.viewer.pauseAnimate();
-                            console.log('🎬 3Dmol.js animation paused');
                         }
                         state.animating = false;
                     } catch (err) {
-                        console.error('🎬 Error stopping 3Dmol.js animation:', err);
+                        console.error('Error stopping 3Dmol.js animation:', err);
                     }
                 }
             }
@@ -577,8 +540,6 @@ class Mol3DViewer(ReactiveHTML):
         
         "animation_speed": """
             if (state.viewer && state.animating) {
-                console.log('🎬 Animation speed changed to:', data.animation_speed, 'ms');
-                
                 // Restart frame sync with new speed
                 if (state.sync_interval) {
                     clearInterval(state.sync_interval);
@@ -598,7 +559,6 @@ class Mol3DViewer(ReactiveHTML):
                     };
                     
                     state.viewer.animate(animateOptions);
-                    console.log('🎬 Animation restarted with new speed');
                     
                     // Restart frame sync with new speed
                     state.sync_interval = setInterval(() => {
@@ -608,24 +568,21 @@ class Mol3DViewer(ReactiveHTML):
                                     const currentFrame = state.viewer.getFrame();
                                     if (data.current_frame !== currentFrame) {
                                         data.current_frame = currentFrame;
-                                        console.log('🔄 Speed change - Updated current_frame to:', currentFrame);
                                     }
                                 }
                             } catch (err) {
-                                console.log('🔄 Frame sync error (normal):', err.message);
+                                // Frame sync errors are expected during transitions
                             }
                         }
                     }, Math.min(data.animation_speed / 2, 100));
                     
                 } catch (err) {
-                    console.error('🎬 Error updating animation speed:', err);
+                    console.error('Error updating animation speed:', err);
                 }
             }
         """,
         
         "total_frames": """
-            console.log('🔢 TOTAL_FRAMES TRIGGERED:', data.total_frames);
-            
             // Update the total frames display
             const totalFramesSpan = document.getElementById('total-frames');
             if (totalFramesSpan) {
@@ -636,7 +593,6 @@ class Mol3DViewer(ReactiveHTML):
                 // Update frame bounds when total frames changes
                 if (data.current_frame >= data.total_frames) {
                     // Reset to first frame if current frame is out of bounds
-                    console.log('🔢 Resetting to frame 0 due to bounds');
                     state.viewer.setFrame(0);
                     state.viewer.render();
                 }

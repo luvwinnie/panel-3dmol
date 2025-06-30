@@ -68,7 +68,6 @@ try:
     xyz_frames = extract_xyz_frames_to_list('DMF_final.xyz')
     df_energy = pd.read_csv('DMF_energy.csv')
 except FileNotFoundError:
-    print("Demo mode: Creating sample data (DMF_final.xyz and DMF_energy.csv not found)")
     # Create demo data
     xyz_frames = []
     for i in range(20):
@@ -158,63 +157,24 @@ class AnimatedMolecularViewer(param.Parameterized):
         # Disable Panel animation since we're using 3Dmol.js native animation
         self._panel_animation_disabled = True
         
-        print(f"Initialized with {num_frames} frames using native 3Dmol.js animation with Panel sync")
+        print(f"Initialized with {num_frames} frames using native 3Dmol.js animation")
     
     def on_mol_viewer_frame_change(self, event):
         """Handle frame changes from 3Dmol.js animation (JavaScript -> Python sync)"""
         new_frame = event.new
         
         if new_frame != self.current_frame and not self._updating_from_panel:
-            print(f"🔄 3Dmol.js frame change detected: {event.old} -> {new_frame}")
-            
             # Update Panel's current_frame to match 3Dmol.js animation
             self.current_frame = new_frame
             
             # Update info panel and energy plot to follow 3Dmol.js animation
             self.info_panel.object = self.get_frame_info_html(new_frame)
             self.update_energy_plot()
-            
-            print(f"🔄 Panel controls synced to 3Dmol.js frame: {new_frame}")
     
     def update_molecular_viewer(self, frame_id):
-        """Reactive function to update molecular viewer (called via pn.bind)"""
-        print(f"🔄 REACTIVE UPDATE started: frame {frame_id}")
-        
-        try:
-            # Update molecular viewer frame
-            print(f"🔄 Calling mol_viewer.setFrame({frame_id})")
-            self.mol_viewer.setFrame(frame_id)
-            
-            # Also update the mol_viewer's current_frame parameter to keep it in sync
-            if hasattr(self.mol_viewer, 'current_frame'):
-                print(f"🔄 Setting mol_viewer.current_frame = {frame_id}")
-                self.mol_viewer.current_frame = frame_id
-            
-            # Force render to ensure the frame change is visible
-            print(f"🔄 Calling mol_viewer.render()")
-            self.mol_viewer.render()
-            
-            # Force parameter trigger to ensure JavaScript update
-            print(f"🔄 Triggering mol_viewer.param.trigger('current_frame')")
-            self.mol_viewer.param.trigger('current_frame')
-            
-            # Update info panel
-            print(f"🔄 Updating info panel")
-            self.info_panel.object = self.get_frame_info_html(frame_id)
-            
-            # Update energy plot marker
-            print(f"🔄 Updating energy plot")
-            self.update_energy_plot()
-            
-            print(f"🔄 REACTIVE UPDATE completed successfully: frame {frame_id}")
-            
-        except Exception as e:
-            print(f"🔄 ERROR in reactive update: {e}")
-            import traceback
-            traceback.print_exc()
-        
-        # Return something to indicate completion
-        return f"Frame {frame_id}"
+        """Reactive function (disabled - using native 3Dmol.js animation)"""
+        # This function is no longer used since we switched to native 3Dmol.js animation
+        pass
     
     def apply_molecular_style(self):
         """Apply current molecular styling"""
@@ -386,12 +346,10 @@ class AnimatedMolecularViewer(param.Parameterized):
         """Handle frame changes - update mol_viewer and energy plot"""
         frame_id = event.new
         
-        print(f"on_frame_change called: {event.old} -> {frame_id} (from animation: {hasattr(self, '_in_animation')})")
-        
         # Flag to prevent feedback loops
         self._updating_from_panel = True
         
-        # CRITICAL: Only update the current_frame parameter, let ReactiveHTML handle the rest
+        # Only update the current_frame parameter, let ReactiveHTML handle the rest
         if hasattr(self.mol_viewer, 'current_frame'):
             self.mol_viewer.current_frame = frame_id
         
@@ -402,8 +360,6 @@ class AnimatedMolecularViewer(param.Parameterized):
         self.update_energy_plot()
         
         self._updating_from_panel = False
-        
-        print(f"Frame updated to: {frame_id}")
     
     def update_energy_plot(self):
         """Update the energy plot with new current frame marker"""
@@ -445,33 +401,26 @@ class AnimatedMolecularViewer(param.Parameterized):
     
     def on_animation_control(self, event):
         """Handle animation control changes - Native 3Dmol.js animation"""
-        print(f"🎮 NATIVE ANIMATION CONTROL: {event.name} changed from {event.old} to {event.new}")
-        
         if event.name == 'is_playing':
-            print(f"🎮 Play/Pause button pressed: {event.new}")
             if event.new:
-                print("🎮 Starting native 3Dmol.js animation...")
                 # Set animation speed and start 3Dmol.js animation
                 self.mol_viewer.animation_speed = self.animation_speed
                 self.mol_viewer.animate = True  # This triggers native animate() in JavaScript
             else:
-                print("🎮 Stopping native 3Dmol.js animation...")
                 self.mol_viewer.animate = False  # This stops native animation in JavaScript
                 
         elif event.name == 'animation_speed':
-            print(f"🎮 Animation speed changed to: {event.new}ms")
             # Update speed on mol_viewer - JavaScript will handle restart
             self.mol_viewer.animation_speed = event.new
             
         elif event.name == 'loop_mode':
-            print(f"🎮 Loop mode changed to: {event.new}")
             # For now, 3Dmol.js handles looping internally
             # Future: could modify JavaScript to support different loop modes
+            pass
     
     def on_display_change(self, event):
         """Handle display option changes"""
         self.apply_molecular_style()
-        print(f"Display updated: {event.name} = {event.new}")
     
     def on_plot_click(self, event):
         """Handle energy plot clicks"""
@@ -480,7 +429,6 @@ class AnimatedMolecularViewer(param.Parameterized):
             frame_id = int(point['x'])
             if 0 <= frame_id < num_frames:
                 self.current_frame = frame_id
-                print(f"Clicked on energy plot, jumping to frame: {frame_id}")
     
     def sync_with_3dmol_animation(self):
         """This method is no longer needed - 3Dmol.js animation syncs automatically via JavaScript callbacks"""
@@ -546,8 +494,6 @@ class AnimatedMolecularViewer(param.Parameterized):
         )
 
 # Create the application
-print("Creating refactored AnimatedMolecularViewer with latest Panel-3Dmol Animation API...")
-
 viewer_app = AnimatedMolecularViewer()
 app = viewer_app.create_dashboard()
 
