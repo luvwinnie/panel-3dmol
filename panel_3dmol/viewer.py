@@ -41,17 +41,27 @@ class Mol3DViewer(ReactiveHTML):
             const viewerDiv = viewer;
             state.viewer = $3Dmol.createViewer(viewerDiv, {backgroundColor: data.background_color || "white"});
             if (data.structure) {
+                console.log('Loading structure with', data.total_frames, 'frames');
                 // Check if this is multi-frame data
                 if (data.total_frames > 1) {
+                    console.log('Using addModelsAsFrames for multi-frame structure');
                     // Use addModelsAsFrames for multi-frame structures
                     state.viewer.addModelsAsFrames(data.structure, data.filetype);
                 } else {
+                    console.log('Using addModel for single frame');
                     // Single frame - use regular addModel
                     state.viewer.addModel(data.structure, data.filetype);
                 }
                 state.viewer.setStyle({}, {stick:{radius: 0.15}, sphere:{radius: 0.3}});
                 state.viewer.zoomTo();
                 state.viewer.render();
+                
+                // Debug: Check loaded models
+                const models = state.viewer.getModels();
+                console.log('Models loaded after render:', models.length);
+                if (models.length > 0 && data.total_frames > 1) {
+                    console.log('Model has frames:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
+                }
             }
         """,
         
@@ -59,11 +69,14 @@ class Mol3DViewer(ReactiveHTML):
             if (state.viewer) {
                 state.viewer.clear();
                 if (data.structure) {
+                    console.log('Updating structure with', data.total_frames, 'frames');
                     // Check if this is multi-frame data
                     if (data.total_frames > 1) {
+                        console.log('Using addModelsAsFrames for multi-frame structure update');
                         // Use addModelsAsFrames for multi-frame structures
                         state.viewer.addModelsAsFrames(data.structure, data.filetype);
                     } else {
+                        console.log('Using addModel for single frame update');
                         // Single frame - use regular addModel
                         state.viewer.addModel(data.structure, data.filetype);
                     }
@@ -84,6 +97,13 @@ class Mol3DViewer(ReactiveHTML):
                     
                     state.viewer.setStyle({}, style);
                     state.viewer.zoomTo();
+                    
+                    // Debug: Check loaded models after structure update
+                    const models = state.viewer.getModels();
+                    console.log('Models loaded after structure update:', models.length);
+                    if (models.length > 0 && data.total_frames > 1) {
+                        console.log('Model frames after update:', models[0].getFrames ? models[0].getFrames() : 'No getFrames method');
+                    }
                     
                     // Handle labels after structure is loaded
                     state.viewer.removeAllLabels();
@@ -357,13 +377,22 @@ class Mol3DViewer(ReactiveHTML):
         
         "current_frame": """
             if (state.viewer && data.total_frames > 1) {
-                console.log('Setting frame to:', data.current_frame);
+                console.log('Setting frame to:', data.current_frame, 'of', data.total_frames);
+                // Check if we have models loaded
+                const models = state.viewer.getModels();
+                console.log('Number of models loaded:', models.length);
+                if (models.length > 0) {
+                    console.log('Model frames available:', models[0].getFrames ? models[0].getFrames() : 'getFrames not available');
+                }
+                
                 // Use 3Dmol.js setFrame method for multi-frame structures
                 state.viewer.setFrame(data.current_frame).then(() => {
                     state.viewer.render();
                     console.log('Frame set and rendered:', data.current_frame);
                 }).catch(err => {
                     console.error('Error setting frame:', err);
+                    console.log('Trying fallback render...');
+                    state.viewer.render();
                 });
             }
         """,
@@ -573,11 +602,12 @@ class Mol3DViewer(ReactiveHTML):
         if isinstance(structures, list):
             # Multiple structures - create multi-frame content
             if filetype == 'xyz':
-                # Combine XYZ structures into single multi-frame XYZ
-                combined = ""
+                # For 3Dmol.js addModelsAsFrames, we need to create a proper multi-frame XYZ format
+                # Each frame should be separated without extra newlines between frames
+                combined_frames = []
                 for structure in structures:
-                    combined += structure.strip() + "\n"
-                self.structure = combined
+                    combined_frames.append(structure.strip())
+                self.structure = "\n".join(combined_frames)
             else:
                 # For other formats, just use the first structure for now
                 # TODO: Implement proper multi-frame support for PDB/SDF
