@@ -527,15 +527,22 @@ class AnimatedMolecularViewer(param.Parameterized):
                     try:
                         print(f"⏰ Updating molecular viewer to frame {next_frame}")
                         
-                        # First set the parameter
+                        # CRITICAL: Directly set mol_viewer current_frame and trigger ALL parameters
+                        # This ensures the JavaScript current_frame script gets executed
+                        old_frame = self.mol_viewer.current_frame
                         self.mol_viewer.current_frame = next_frame
-                        print(f"⏰ Set mol_viewer.current_frame = {next_frame}")
+                        print(f"⏰ Set mol_viewer.current_frame: {old_frame} -> {next_frame}")
                         
-                        # Then trigger the parameter to ensure JavaScript is called
+                        # Force trigger ALL reactive scripts to ensure JavaScript execution
+                        print(f"⏰ Triggering all parameters to force JavaScript execution...")
                         self.mol_viewer.param.trigger('current_frame')
-                        print(f"⏰ Triggered current_frame parameter")
+                        self.mol_viewer.param.trigger('total_frames')  # Extra trigger
                         
-                        print(f"⏰ Molecular viewer update successful")
+                        # Alternative: also trigger a different parameter to force update
+                        self.mol_viewer.param.trigger('animate')
+                        
+                        print(f"⏰ All parameter triggers completed")
+                        
                     except Exception as e:
                         print(f"⏰ ERROR in molecular viewer update: {e}")
                         import traceback

@@ -447,58 +447,57 @@ class Mol3DViewer(ReactiveHTML):
         """,
         
         "current_frame": """
-            if (state.viewer && data.total_frames > 1) {
-                console.log('🎬 Setting frame to:', data.current_frame, 'of', data.total_frames);
+            console.log('🎬 CURRENT_FRAME SCRIPT TRIGGERED! Frame:', data.current_frame, 'of', data.total_frames);
+            
+            if (state.viewer) {
+                console.log('🎬 Viewer exists, attempting frame update...');
                 
-                // Check if we have models loaded
+                // ALWAYS try to set frame regardless of getModels availability
+                try {
+                    console.log('🎬 Calling setFrame(' + data.current_frame + ')');
+                    
+                    if (typeof state.viewer.setFrame === 'function') {
+                        state.viewer.setFrame(data.current_frame);
+                        console.log('🎬 setFrame completed successfully');
+                    } else {
+                        console.warn('🎬 setFrame method not available on viewer');
+                    }
+                    
+                    // Always render after frame change
+                    if (typeof state.viewer.render === 'function') {
+                        state.viewer.render();
+                        console.log('🎬 Render completed for frame:', data.current_frame);
+                    } else {
+                        console.warn('🎬 render method not available');
+                    }
+                    
+                    console.log('🎬 ✅ Frame update SUCCESSFUL:', data.current_frame);
+                    
+                } catch (err) {
+                    console.error('🎬 ❌ Error in frame update:', err);
+                    console.log('🎬 Trying fallback render...');
+                    try {
+                        state.viewer.render();
+                        console.log('🎬 Fallback render completed');
+                    } catch (renderErr) {
+                        console.error('🎬 Even fallback render failed:', renderErr);
+                    }
+                }
+                
+                // Optional: Debug model information (but don't let it block the frame update)
                 try {
                     if (typeof state.viewer.getModels === 'function') {
                         const models = state.viewer.getModels();
-                        console.log('🎬 Number of models loaded:', models.length);
-                        
-                        if (models.length > 0) {
-                            console.log('🎬 Model frames available:', models[0].getFrames ? models[0].getFrames() : 'getFrames not available');
-                            
-                            try {
-                                // 3Dmol.js setFrame is synchronous, not a Promise
-                                console.log('🎬 Calling setFrame(' + data.current_frame + ')');
-                                if (typeof state.viewer.setFrame === 'function') {
-                                    state.viewer.setFrame(data.current_frame);
-                                    console.log('🎬 setFrame completed, now rendering...');
-                                } else {
-                                    console.warn('🎬 setFrame method not available on viewer');
-                                }
-                                
-                                state.viewer.render();
-                                console.log('🎬 Frame set and rendered successfully:', data.current_frame);
-                                
-                            } catch (err) {
-                                console.error('🎬 Error setting frame:', err);
-                                console.log('🎬 Trying fallback render...');
-                                state.viewer.render();
-                            }
-                        } else {
-                            console.warn('🎬 No models loaded, cannot set frame');
-                        }
+                        console.log('🎬 Debug: Models loaded:', models.length);
                     } else {
-                        console.log('🎬 getModels method not available, trying direct setFrame...');
-                        try {
-                            if (typeof state.viewer.setFrame === 'function') {
-                                state.viewer.setFrame(data.current_frame);
-                                state.viewer.render();
-                                console.log('🎬 Direct setFrame successful:', data.current_frame);
-                            } else {
-                                console.warn('🎬 setFrame method not available on viewer');
-                            }
-                        } catch (err) {
-                            console.error('🎬 Error with direct setFrame:', err);
-                        }
+                        console.log('🎬 Debug: getModels not available');
                     }
-                } catch (e) {
-                    console.error('🎬 Error in frame update:', e.message);
+                } catch (debugErr) {
+                    console.log('🎬 Debug: Model check failed (non-critical):', debugErr.message);
                 }
+                
             } else {
-                console.log('🎬 Skipping frame update - viewer:', !!state.viewer, 'total_frames:', data.total_frames);
+                console.error('🎬 ❌ NO VIEWER - cannot update frame');
             }
         """,
         
