@@ -352,6 +352,12 @@ class AnimatedMolecularViewer(param.Parameterized):
         if hasattr(self.mol_viewer, 'current_frame'):
             self.mol_viewer.current_frame = frame_id
         
+        # Force render to ensure the frame change is visible
+        self.mol_viewer.render()
+        
+        # Force parameter trigger to ensure JavaScript update
+        self.mol_viewer.param.trigger('current_frame')
+        
         # Update info panel
         self.info_panel.object = self.get_frame_info_html(frame_id)
         
@@ -469,7 +475,7 @@ class AnimatedMolecularViewer(param.Parameterized):
                 self._animation_direction = 1
         
         self.current_frame = next_frame
-        print(f"Animation: {old_frame} -> {next_frame} (mode: {self.loop_mode})")
+        print(f"Animation: {old_frame} -> {next_frame} (mode: {self.loop_mode}) [{next_frame}/{num_frames-1}]")
     
     def create_dashboard(self):
         """Create the complete dashboard"""
