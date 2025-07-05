@@ -1,6 +1,35 @@
 import panel as pn
 import param
 from panel.reactive import ReactiveHTML
+import re
+import io
+import warnings
+
+# Optional imports for molecular file parsing
+try:
+    from rdkit import Chem
+    from rdkit.Chem import Descriptors
+    HAS_RDKIT = True
+except ImportError:
+    HAS_RDKIT = False
+
+try:
+    from openbabel import openbabel
+    HAS_OPENBABEL = True
+except ImportError:
+    HAS_OPENBABEL = False
+
+try:
+    import cclib
+    HAS_CCLIB = True
+except ImportError:
+    HAS_CCLIB = False
+
+try:
+    from ase import io as ase_io
+    HAS_ASE = True
+except ImportError:
+    HAS_ASE = False
 
 class Mol3DViewer(ReactiveHTML):
     """
@@ -9,7 +38,7 @@ class Mol3DViewer(ReactiveHTML):
     
     # Core parameters
     structure = param.String(default="", doc="Molecular structure data")
-    filetype = param.String(default="xyz", doc="File type (xyz, mol, pdb, sdf, etc.)")
+    filetype = param.String(default="xyz", doc="File type (xyz, mol, pdb, sdf, com, gjf)")
     background_color = param.String(default="white", doc="Background color")
     
     # Style parameters for py3dmol compatibility
@@ -29,6 +58,9 @@ class Mol3DViewer(ReactiveHTML):
     animate = param.Boolean(default=False, doc="Enable/disable animation")
     animation_speed = param.Number(default=100, bounds=(1, 10000), doc="Animation speed in milliseconds")
     animate_options = param.Dict(default={}, doc="Custom 3Dmol.js animation options")
+    
+    # Internal parameters for parsed data
+    parsed_atoms = param.List(default=[], doc="Parsed atom coordinates for labeling")
     
     
     # HTML template (simplified - no multiple template variables)
@@ -66,23 +98,28 @@ class Mol3DViewer(ReactiveHTML):
             if (data.structure) {
                 console.log('🧬 RENDER: Loading structure with', data.total_frames, 'frames');
                 console.log('🧬 RENDER: Structure length:', data.structure.length, 'characters');
+                console.log('🧬 RENDER: Original filetype:', data.filetype);
+                
+                // Convert structure to 3Dmol.js compatible format if needed
+                let processedStructure = data.structure;
+                let processedFiletype = data.filetype;
                 
                 // Check if this is multi-frame data
                 if (data.total_frames > 1) {
                     console.log('🧬 RENDER: Using addModelsAsFrames for multi-frame structure');
                     try {
                         // Use addModelsAsFrames for multi-frame structures
-                        state.viewer.addModelsAsFrames(data.structure, data.filetype);
+                        state.viewer.addModelsAsFrames(processedStructure, processedFiletype);
                         console.log('🧬 RENDER: addModelsAsFrames completed successfully');
                     } catch (err) {
                         console.error('🧬 RENDER: Error in addModelsAsFrames:', err);
                         console.log('🧬 RENDER: Falling back to single model...');
-                        state.viewer.addModel(data.structure, data.filetype);
+                        state.viewer.addModel(processedStructure, processedFiletype);
                     }
                 } else {
                     console.log('🧬 RENDER: Using addModel for single frame');
                     // Single frame - use regular addModel
-                    state.viewer.addModel(data.structure, data.filetype);
+                    state.viewer.addModel(processedStructure, processedFiletype);
                 }
                 state.viewer.setStyle({}, {stick:{radius: 0.15}, sphere:{radius: 0.3}});
                 state.viewer.zoomTo();
@@ -183,52 +220,21 @@ class Mol3DViewer(ReactiveHTML):
                     // Handle labels after structure is loaded
                     state.viewer.removeAllLabels();
                     
-                    // Add atom labels if enabled
-                    if (data.show_atom_labels) {
-                        const lines = data.structure.trim().split('\\n');
-                        if (data.filetype === 'xyz' && lines.length > 2) {
-                            const natoms = parseInt(lines[0]);
-                            const atomLines = lines.slice(2, 2 + natoms);
-                            
-                            atomLines.forEach((line, idx) => {
-                                const parts = line.trim().split(/\\s+/);
-                                if (parts.length >= 4) {
-                                    const x = parseFloat(parts[1]);
-                                    const y = parseFloat(parts[2]);
-                                    const z = parseFloat(parts[3]);
-                                    
-                                    state.viewer.addLabel(String(idx + 1), {
-                                        position: {x: x, y: y, z: z},
-                                        backgroundColor: 'white',
-                                        backgroundOpacity: 0,
-                                        fontColor: 'blue',
-                                        font: 'arial',
-                                        fontSize: 16,
-                                        fontOpacity: 1.0,
-                                        inFront: true
-                                    });
-                                }
+                    // Add atom labels if enabled using Python-parsed coordinates
+                    if (data.show_atom_labels && data.parsed_atoms) {
+                        data.parsed_atoms.forEach((atom, idx) => {
+                            const [element, x, y, z] = atom;
+                            state.viewer.addLabel(String(idx + 1), {
+                                position: {x: x, y: y, z: z},
+                                backgroundColor: 'white',
+                                backgroundOpacity: 0,
+                                fontColor: 'blue',
+                                font: 'arial',
+                                fontSize: 16,
+                                fontOpacity: 1.0,
+                                inFront: true
                             });
-                        } else if (data.filetype === 'pdb') {
-                            const atomLines = lines.filter(line => line.startsWith('ATOM') || line.startsWith('HETATM'));
-                            
-                            atomLines.forEach((line, idx) => {
-                                const x = parseFloat(line.substring(30, 38).trim());
-                                const y = parseFloat(line.substring(38, 46).trim());
-                                const z = parseFloat(line.substring(46, 54).trim());
-                                
-                                state.viewer.addLabel(String(idx + 1), {
-                                    position: {x: x, y: y, z: z},
-                                    backgroundColor: 'white',
-                                    backgroundOpacity: 0,
-                                    fontColor: 'blue',
-                                    font: 'arial',
-                                    fontSize: 16,
-                                    fontOpacity: 1.0,
-                                    inFront: true
-                                });
-                            });
-                        }
+                        });
                     }
                     
                     // Add custom labels
@@ -390,53 +396,21 @@ class Mol3DViewer(ReactiveHTML):
                 // Clear existing labels
                 state.viewer.removeAllLabels();
                 
-                // Add atom labels if enabled
-                if (data.show_atom_labels) {
-                    const lines = data.structure.trim().split('\\n');
-                    
-                    if (data.filetype === 'xyz' && lines.length > 2) {
-                        const natoms = parseInt(lines[0]);
-                        const atomLines = lines.slice(2, 2 + natoms);
-                        
-                        atomLines.forEach((line, idx) => {
-                            const parts = line.trim().split(/\\s+/);
-                            if (parts.length >= 4) {
-                                const x = parseFloat(parts[1]);
-                                const y = parseFloat(parts[2]);
-                                const z = parseFloat(parts[3]);
-                                
-                                state.viewer.addLabel(String(idx + 1), {
-                                    position: {x: x, y: y, z: z},
-                                    backgroundColor: 'white',
-                                    backgroundOpacity: 0,
-                                    fontColor: 'blue',
-                                    font: 'arial',
-                                    fontSize: 16,
-                                    fontOpacity: 1.0,
-                                    inFront: true
-                                });
-                            }
+                // Add atom labels if enabled using Python-parsed coordinates
+                if (data.show_atom_labels && data.parsed_atoms) {
+                    data.parsed_atoms.forEach((atom, idx) => {
+                        const [element, x, y, z] = atom;
+                        state.viewer.addLabel(String(idx + 1), {
+                            position: {x: x, y: y, z: z},
+                            backgroundColor: 'white',
+                            backgroundOpacity: 0,
+                            fontColor: 'blue',
+                            font: 'arial',
+                            fontSize: 16,
+                            fontOpacity: 1.0,
+                            inFront: true
                         });
-                    } else if (data.filetype === 'pdb') {
-                        const atomLines = lines.filter(line => line.startsWith('ATOM') || line.startsWith('HETATM'));
-                        
-                        atomLines.forEach((line, idx) => {
-                            const x = parseFloat(line.substring(30, 38).trim());
-                            const y = parseFloat(line.substring(38, 46).trim());
-                            const z = parseFloat(line.substring(46, 54).trim());
-                            
-                            state.viewer.addLabel(String(idx + 1), {
-                                position: {x: x, y: y, z: z},
-                                backgroundColor: 'white',
-                                backgroundOpacity: 0,
-                                fontColor: 'blue',
-                                font: 'arial',
-                                fontSize: 16,
-                                fontOpacity: 1.0,
-                                inFront: true
-                            });
-                        });
-                    }
+                    });
                 }
                 
                 // Re-add custom labels
@@ -646,12 +620,242 @@ class Mol3DViewer(ReactiveHTML):
         self._updating_frame = False  # Flag to prevent feedback loops
         self._frame_structures = []  # Storage for frame structures
         
+    def _convert_to_3dmol_format(self, structure_data, filetype):
+        """Convert molecular files to 3Dmol.js compatible formats using external packages"""
+        filetype = filetype.lower()
+        
+        # Direct 3Dmol.js supported formats
+        if filetype in ['xyz', 'pdb', 'sdf']:
+            return structure_data, filetype
+        
+        # Convert MOL to SDF (3Dmol.js treats them similarly)
+        if filetype == 'mol':
+            return structure_data, 'sdf'
+        
+        # Convert COM/GJF using available packages
+        if filetype in ['com', 'gjf']:
+            return self._convert_gaussian_to_xyz(structure_data)
+        
+        # Fallback - try to parse as XYZ
+        warnings.warn(f"Unsupported format {filetype}, attempting to parse as XYZ")
+        return structure_data, 'xyz'
+    
+    def _convert_gaussian_to_xyz(self, gaussian_data):
+        """Convert Gaussian COM/GJF format to XYZ using available packages"""
+        
+        # Try OpenBabel first (most comprehensive)
+        if HAS_OPENBABEL:
+            try:
+                return self._openbabel_to_xyz(gaussian_data, 'com')
+            except Exception as e:
+                warnings.warn(f"OpenBabel conversion failed: {e}")
+        
+        # Try CClib for Gaussian files
+        if HAS_CCLIB:
+            try:
+                return self._cclib_to_xyz(gaussian_data)
+            except Exception as e:
+                warnings.warn(f"CClib conversion failed: {e}")
+        
+        # Fallback to manual parsing
+        try:
+            return self._manual_gaussian_to_xyz(gaussian_data)
+        except Exception as e:
+            raise ValueError(f"Failed to convert Gaussian file: {e}")
+    
+    def _openbabel_to_xyz(self, data, input_format):
+        """Convert using OpenBabel"""
+        conv = openbabel.OBConversion()
+        conv.SetInAndOutFormats(input_format, "xyz")
+        
+        mol = openbabel.OBMol()
+        conv.ReadString(mol, data)
+        
+        xyz_data = conv.WriteString(mol)
+        return xyz_data, 'xyz'
+    
+    def _cclib_to_xyz(self, gaussian_data):
+        """Convert Gaussian data using CClib"""
+        # CClib typically works with files, so we'll use a string buffer
+        string_buffer = io.StringIO(gaussian_data)
+        
+        # Parse the Gaussian data
+        parser = cclib.io.ccopen(string_buffer)
+        if parser is None:
+            raise ValueError("CClib could not parse the Gaussian data")
+        
+        data = parser.parse()
+        
+        # Extract coordinates and atom types
+        if not hasattr(data, 'atomcoords') or not hasattr(data, 'atomnos'):
+            raise ValueError("No coordinate data found in Gaussian file")
+        
+        # Use the last set of coordinates
+        coords = data.atomcoords[-1]
+        atomnos = data.atomnos
+        
+        # Convert atomic numbers to symbols
+        from cclib.parser.utils import PeriodicTable
+        pt = PeriodicTable()
+        
+        # Create XYZ format
+        xyz_lines = [str(len(atomnos)), "Converted from Gaussian format"]
+        for i, (atomno, coord) in enumerate(zip(atomnos, coords)):
+            symbol = pt.element[atomno]
+            x, y, z = coord
+            xyz_lines.append(f"{symbol} {x:.6f} {y:.6f} {z:.6f}")
+        
+        return '\n'.join(xyz_lines), 'xyz'
+    
+    def _manual_gaussian_to_xyz(self, gaussian_data):
+        """Manual parsing of Gaussian COM/GJF format"""
+        lines = gaussian_data.strip().split('\n')
+        
+        # Find the molecule specification section
+        coord_start = -1
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped and len(stripped.split()) == 2:
+                try:
+                    # Check if line contains charge and multiplicity
+                    charge, mult = map(int, stripped.split())
+                    coord_start = i + 1
+                    break
+                except ValueError:
+                    continue
+        
+        if coord_start == -1:
+            raise ValueError("Could not find molecule specification in Gaussian file")
+        
+        # Extract coordinates
+        atoms = []
+        for i in range(coord_start, len(lines)):
+            line = lines[i].strip()
+            if not line or line.startswith('%') or line.startswith('#'):
+                break
+            
+            parts = line.split()
+            if len(parts) >= 4:
+                try:
+                    element = parts[0]
+                    x, y, z = map(float, parts[1:4])
+                    atoms.append((element, x, y, z))
+                except (ValueError, IndexError):
+                    break
+        
+        if not atoms:
+            raise ValueError("No valid coordinates found in Gaussian file")
+        
+        # Create XYZ format
+        xyz_lines = [str(len(atoms)), "Converted from Gaussian format"]
+        for element, x, y, z in atoms:
+            xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
+        
+        return '\n'.join(xyz_lines), 'xyz'
+    
+    def _parse_atoms_for_labels(self, structure_data, filetype):
+        """Parse atom coordinates for labeling from various formats"""
+        filetype = filetype.lower()
+        
+        if filetype == 'xyz':
+            return self._parse_xyz_atoms(structure_data)
+        elif filetype == 'pdb':
+            return self._parse_pdb_atoms(structure_data)
+        elif filetype in ['sdf', 'mol']:
+            return self._parse_sdf_atoms(structure_data)
+        elif filetype in ['com', 'gjf']:
+            # Convert to XYZ first, then parse
+            xyz_data, _ = self._convert_gaussian_to_xyz(structure_data)
+            return self._parse_xyz_atoms(xyz_data)
+        else:
+            return []
+    
+    def _parse_xyz_atoms(self, xyz_data):
+        """Parse XYZ format atoms"""
+        lines = xyz_data.strip().split('\n')
+        if len(lines) < 3:
+            return []
+        
+        try:
+            natoms = int(lines[0])
+            atoms = []
+            for i in range(2, min(2 + natoms, len(lines))):
+                parts = lines[i].split()
+                if len(parts) >= 4:
+                    element = parts[0]
+                    x, y, z = map(float, parts[1:4])
+                    atoms.append((element, x, y, z))
+            return atoms
+        except (ValueError, IndexError):
+            return []
+    
+    def _parse_pdb_atoms(self, pdb_data):
+        """Parse PDB format atoms"""
+        lines = pdb_data.strip().split('\n')
+        atoms = []
+        
+        for line in lines:
+            if line.startswith('ATOM') or line.startswith('HETATM'):
+                try:
+                    if len(line) >= 54:
+                        element = line[76:78].strip() or line[12:16].strip()[:1]
+                        x = float(line[30:38].strip())
+                        y = float(line[38:46].strip())
+                        z = float(line[46:54].strip())
+                        atoms.append((element, x, y, z))
+                except (ValueError, IndexError):
+                    continue
+        
+        return atoms
+    
+    def _parse_sdf_atoms(self, sdf_data):
+        """Parse SDF/MOL format atoms"""
+        lines = sdf_data.strip().split('\n')
+        
+        if len(lines) < 4:
+            return []
+        
+        try:
+            counts_line = lines[3]
+            atom_count = int(counts_line[:3])
+            
+            atoms = []
+            for i in range(4, min(4 + atom_count, len(lines))):
+                line = lines[i]
+                if len(line) >= 34:
+                    x = float(line[:10].strip())
+                    y = float(line[10:20].strip())
+                    z = float(line[20:30].strip())
+                    element = line[31:34].strip()
+                    atoms.append((element, x, y, z))
+            
+            return atoms
+        except (ValueError, IndexError):
+            return []
+        
     
     # py3dmol-compatible API methods
     def addModel(self, data, format):
         """Add a molecular model to the viewer (py3dmol compatible)"""
-        self.structure = data
-        self.filetype = format
+        try:
+            # Convert to 3Dmol.js compatible format if needed
+            converted_data, converted_format = self._convert_to_3dmol_format(data, format)
+            self.structure = converted_data
+            self.filetype = converted_format
+            
+            # Parse atoms for labeling using original format
+            self.parsed_atoms = self._parse_atoms_for_labels(data, format)
+        except Exception as e:
+            warnings.warn(f"Format conversion failed: {e}. Using original data.")
+            self.structure = data
+            self.filetype = format
+            
+            # Try parsing with original format
+            try:
+                self.parsed_atoms = self._parse_atoms_for_labels(data, format)
+            except Exception as parse_e:
+                warnings.warn(f"Atom parsing failed: {parse_e}")
+                self.parsed_atoms = []
         return self
     
     def setStyle(self, selection={}, style={}):
