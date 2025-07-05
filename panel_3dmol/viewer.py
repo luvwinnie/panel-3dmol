@@ -761,6 +761,12 @@ class Mol3DViewer(ReactiveHTML):
         self.animate = False
         return self
     
+    def stopAnimationImmediate(self):
+        """Stop animation immediately and force cleanup (Python instant stop)"""
+        self.animate = False
+        self.param.trigger('animate')  # Force immediate JavaScript execution
+        return self
+    
     def setAnimationSpeed(self, speed):
         """Set animation speed in milliseconds (py3dmol compatible)"""
         self.animation_speed = speed
