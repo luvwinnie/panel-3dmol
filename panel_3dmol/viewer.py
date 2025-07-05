@@ -28,6 +28,7 @@ class Mol3DViewer(ReactiveHTML):
     total_frames = param.Integer(default=1, bounds=(1, None), doc="Total number of frames")
     animate = param.Boolean(default=False, doc="Enable/disable animation")
     animation_speed = param.Number(default=100, bounds=(1, 10000), doc="Animation speed in milliseconds")
+    animate_options = param.Dict(default={}, doc="Custom 3Dmol.js animation options")
     
     
     # HTML template (simplified - no multiple template variables)
@@ -485,32 +486,43 @@ class Mol3DViewer(ReactiveHTML):
         "animate": """
             if (state.viewer && data.total_frames > 1) {
                 if (data.animate) {
-                    // Use 3Dmol.js built-in animate method
+                    // Use 3Dmol.js built-in animate method with custom options support
                     try {
-                        const animateOptions = {
+                        // Merge custom animate_options with defaults
+                        const defaultOptions = {
                             loop: 'forward',
                             interval: data.animation_speed || 200,
                             reps: 0  // Infinite loop
                         };
                         
+                        const animateOptions = Object.assign({}, defaultOptions, data.animate_options || {});
+                        console.log('🎬 Starting animation with options:', animateOptions);
+                        
                         state.viewer.animate(animateOptions);
                         state.animating = true;
                         
-                        // Start frame sync polling to update Python parameters
+                        // Reduced frequency frame sync to minimize comm overhead but maintain sync
+                        let lastSyncTime = 0;
+                        const SYNC_THROTTLE = 200; // Sync every 200ms max to reduce messages
+                        
                         state.sync_interval = setInterval(() => {
                             if (state.viewer && state.animating) {
-                                try {
-                                    if (typeof state.viewer.getFrame === 'function') {
-                                        const currentFrame = state.viewer.getFrame();
-                                        if (data.current_frame !== currentFrame) {
-                                            data.current_frame = currentFrame;
+                                const now = Date.now();
+                                if ((now - lastSyncTime) >= SYNC_THROTTLE) {
+                                    try {
+                                        if (typeof state.viewer.getFrame === 'function') {
+                                            const currentFrame = state.viewer.getFrame();
+                                            if (data.current_frame !== currentFrame) {
+                                                data.current_frame = currentFrame;
+                                                lastSyncTime = now;
+                                            }
                                         }
+                                    } catch (err) {
+                                        // Silently handle frame sync errors
                                     }
-                                } catch (err) {
-                                    // Frame sync errors are expected during transitions
                                 }
                             }
-                        }, Math.min(data.animation_speed / 2, 100));
+                        }, SYNC_THROTTLE);
                         
                     } catch (err) {
                         console.error('Error starting 3Dmol.js animation:', err);
@@ -522,7 +534,7 @@ class Mol3DViewer(ReactiveHTML):
                         state.sync_interval = null;
                     }
                     
-                    // Stop 3Dmol.js animation
+                    // Stop 3Dmol.js animation immediately
                     try {
                         if (state.viewer.stopAnimate) {
                             state.viewer.stopAnimate();
@@ -531,6 +543,7 @@ class Mol3DViewer(ReactiveHTML):
                             state.viewer.pauseAnimate();
                         }
                         state.animating = false;
+                        console.log('⏹️ Animation stopped');
                     } catch (err) {
                         console.error('Error stopping 3Dmol.js animation:', err);
                     }
@@ -539,45 +552,67 @@ class Mol3DViewer(ReactiveHTML):
         """,
         
         "animation_speed": """
-            if (state.viewer && state.animating) {
-                // Restart frame sync with new speed
-                if (state.sync_interval) {
-                    clearInterval(state.sync_interval);
-                    state.sync_interval = null;
-                }
-                
-                // Restart animation with new speed
-                try {
-                    if (state.viewer.stopAnimate) {
-                        state.viewer.stopAnimate();
+            // Always respond to animation speed changes, whether animating or not
+            console.log('🎚️ Animation speed changed to:', data.animation_speed, 'ms');
+            
+            if (state.viewer && data.total_frames > 1) {
+                // If currently animating, restart with new speed
+                if (state.animating) {
+                    console.log('🔄 Restarting animation with new speed...');
+                    
+                    // Stop current animation and sync
+                    if (state.sync_interval) {
+                        clearInterval(state.sync_interval);
+                        state.sync_interval = null;
                     }
                     
-                    const animateOptions = {
-                        loop: 'forward',
-                        interval: data.animation_speed,
-                        reps: 0
-                    };
-                    
-                    state.viewer.animate(animateOptions);
-                    
-                    // Restart frame sync with new speed
-                    state.sync_interval = setInterval(() => {
-                        if (state.viewer && state.animating) {
-                            try {
-                                if (typeof state.viewer.getFrame === 'function') {
-                                    const currentFrame = state.viewer.getFrame();
-                                    if (data.current_frame !== currentFrame) {
-                                        data.current_frame = currentFrame;
+                    try {
+                        if (state.viewer.stopAnimate) {
+                            state.viewer.stopAnimate();
+                        }
+                        
+                        // Use custom options if available, otherwise defaults
+                        const defaultOptions = {
+                            loop: 'forward',
+                            interval: data.animation_speed,
+                            reps: 0
+                        };
+                        
+                        const animateOptions = Object.assign({}, defaultOptions, data.animate_options || {});
+                        
+                        // Restart animation with new speed
+                        state.viewer.animate(animateOptions);
+                        
+                        // Restart throttled frame sync
+                        let lastSyncTime = 0;
+                        const SYNC_THROTTLE = 200;
+                        
+                        state.sync_interval = setInterval(() => {
+                            if (state.viewer && state.animating) {
+                                const now = Date.now();
+                                if ((now - lastSyncTime) >= SYNC_THROTTLE) {
+                                    try {
+                                        if (typeof state.viewer.getFrame === 'function') {
+                                            const currentFrame = state.viewer.getFrame();
+                                            if (data.current_frame !== currentFrame) {
+                                                data.current_frame = currentFrame;
+                                                lastSyncTime = now;
+                                            }
+                                        }
+                                    } catch (err) {
+                                        // Silently handle sync errors
                                     }
                                 }
-                            } catch (err) {
-                                // Frame sync errors are expected during transitions
                             }
-                        }
-                    }, Math.min(data.animation_speed / 2, 100));
-                    
-                } catch (err) {
-                    console.error('Error updating animation speed:', err);
+                        }, SYNC_THROTTLE);
+                        
+                        console.log('✅ Animation restarted with speed:', data.animation_speed, 'ms');
+                        
+                    } catch (err) {
+                        console.error('Error updating animation speed:', err);
+                    }
+                } else {
+                    console.log('📝 Animation speed updated (not currently animating)');
                 }
             }
         """,
@@ -749,10 +784,18 @@ class Mol3DViewer(ReactiveHTML):
         """Get the current animation frame (py3dmol compatible)"""
         return self.current_frame
     
-    def startAnimation(self, speed=None, loop_mode="forward"):
-        """Start 3Dmol.js native animation (py3dmol compatible)"""
+    def startAnimation(self, speed=None, loop_mode="forward", **animate_options):
+        """Start 3Dmol.js native animation with custom options (py3dmol compatible)"""
         if speed is not None:
             self.animation_speed = speed
+        
+        # Build animation options
+        options = {'loop': loop_mode}
+        options.update(animate_options)
+        
+        if options:
+            self.animate_options = options
+        
         self.animate = True
         return self
     
@@ -770,6 +813,11 @@ class Mol3DViewer(ReactiveHTML):
     def setAnimationSpeed(self, speed):
         """Set animation speed in milliseconds (py3dmol compatible)"""
         self.animation_speed = speed
+        return self
+    
+    def setAnimationOptions(self, **options):
+        """Set custom 3Dmol.js animation options"""
+        self.animate_options = options
         return self
     
     def addFrames(self, structures, filetype=None):
