@@ -1,13 +1,15 @@
 # Panel-3Dmol
 
-A Panel extension for 3D molecular visualization using 3Dmol.js. Create interactive molecular viewers that work seamlessly with Panel dashboards and Jupyter notebooks.
+[![Github Action Tests](https://github.com/luvwinnie/panel-3dmol/actions/workflows/test.yml/badge.svg)](https://github.com/luvwinnie/panel-3dmol/actions)
+
+A Panel extension for 3D molecular visualization using 3Dmol.js. Create interactive molecular viewers with animation support, labeling capabilities, and seamless Panel dashboard integration.
 
 ## Installation
 
 Install directly from GitHub:
 
 ```bash
-pip install git+https://github.com/luvwinnie/panel-chem.git
+pip install git+https://github.com/luvwinnie/panel-3dmol.git
 ```
 
 ## Quick Start
@@ -112,6 +114,117 @@ dashboard = pn.Column(
 dashboard.servable()
 ```
 
+### Animation and Trajectory Visualization
+
+```python
+import panel as pn
+from panel_3dmol import Mol3DViewer
+
+# Enable Panel
+pn.extension()
+
+# Create viewer with animation support
+viewer = Mol3DViewer(width=600, height=400)
+
+# Load multiple frames for animation
+frame_structures = [
+    # Frame 1
+    """3
+Frame 1
+C    0.0000    0.0000    0.0000
+H    1.0000    0.0000    0.0000
+H   -0.5000    0.8660    0.0000""",
+    
+    # Frame 2 (slightly moved)
+    """3
+Frame 2
+C    0.1000    0.0000    0.0000
+H    1.1000    0.0000    0.0000
+H   -0.4000    0.8660    0.0000""",
+    
+    # Add more frames...
+]
+
+# Add frames to viewer
+viewer.addFrames(frame_structures, filetype="xyz")
+
+# Configure animation
+viewer.startAnimation(speed=500, loop_mode="forward")
+
+# Create controls
+play_button = pn.widgets.Button(name="▶️ Play", button_type="primary")
+stop_button = pn.widgets.Button(name="⏹️ Stop", button_type="primary")
+frame_slider = pn.widgets.IntSlider(
+    name="Frame", 
+    start=0, 
+    end=viewer.total_frames-1, 
+    value=viewer.current_frame
+)
+
+# Animation control callbacks
+def play_animation(event):
+    viewer.startAnimation()
+
+def stop_animation(event):
+    viewer.stopAnimation()
+
+def change_frame(event):
+    viewer.setFrame(frame_slider.value)
+
+play_button.on_click(play_animation)
+stop_button.on_click(stop_animation)
+frame_slider.param.watch(change_frame, 'value')
+
+# Layout with controls
+app = pn.Column(
+    "## 🎬 Molecular Animation",
+    viewer,
+    pn.Row(play_button, stop_button),
+    frame_slider,
+    sizing_mode='stretch_width'
+)
+
+app.servable()
+```
+
+### Labeling and Annotations
+
+```python
+import panel as pn
+from panel_3dmol import Mol3DViewer
+
+# Enable Panel
+pn.extension()
+
+# Create viewer
+viewer = Mol3DViewer()
+
+# Load molecule
+viewer.structure = """6
+Benzene with labels
+C    0.0000    1.3970    0.0000
+C    1.2098    0.6985    0.0000  
+C    1.2098   -0.6985    0.0000
+C    0.0000   -1.3970    0.0000
+C   -1.2098   -0.6985    0.0000
+C   -1.2098    0.6985    0.0000"""
+viewer.filetype = "xyz"
+
+# Enable automatic atom numbering
+viewer.show_atom_labels = True
+
+# Add custom labels
+viewer.addLabel("Benzene Ring", {
+    'position': {'x': 0, 'y': 0, 'z': 1},
+    'backgroundColor': 'yellow',
+    'fontColor': 'black',
+    'fontSize': 18
+})
+
+# Display
+viewer
+```
+
 ### Jupyter Notebook Usage
 
 ```python
@@ -143,18 +256,36 @@ viewer
 
 ### Mol3DViewer Parameters
 
+**Core Parameters:**
 - `structure` (str): Molecular structure data
-- `filetype` (str): File format ('xyz', 'pdb', 'sdf', 'mol', etc.)
+- `filetype` (str): File format ('xyz', 'pdb', 'sdf', 'mol', 'mol2', etc.)
 - `background_color` (str): Background color ('white', 'black', '#ffffff', etc.)
-- `show_stick` (bool): Show stick representation
-- `show_sphere` (bool): Show sphere representation
-- `show_cartoon` (bool): Show cartoon representation (for proteins)
-- `show_line` (bool): Show line representation
-- `show_surface` (bool): Show molecular surface
+
+**Visualization Style Parameters:**
+- `show_stick` (bool): Show stick representation (default: True)
+- `show_sphere` (bool): Show sphere representation (default: True)
+- `show_cartoon` (bool): Show cartoon representation for proteins (default: False)
+- `show_line` (bool): Show line representation (default: False)
+- `show_surface` (bool): Show molecular surface (default: False)
+
+**Animation Parameters:**
+- `current_frame` (int): Current animation frame (default: 0)
+- `total_frames` (int): Total number of frames (default: 1)
+- `animate` (bool): Enable/disable animation (default: False)
+- `animation_speed` (int): Animation speed in milliseconds (default: 100)
+- `animate_options` (dict): Custom 3Dmol.js animation options
+
+**Label Parameters:**
+- `labels` (list): List of custom labels to display
+- `show_atom_labels` (bool): Automatically show atom indices (default: False)
 
 ### py3dmol-Compatible Methods
 
+**Basic Visualization:**
 ```python
+# Add molecular model
+viewer.addModel(data, format)
+
 # Set visualization style
 viewer.setStyle({}, {'stick': {'radius': 0.2}, 'sphere': {'radius': 0.4}})
 
@@ -166,6 +297,50 @@ viewer.clear()
 
 # Force re-render
 viewer.render()
+
+# Center/zoom to molecule
+viewer.center()
+```
+
+**Animation Control:**
+```python
+# Add multiple frames
+viewer.addFrames(structures_list, filetype="xyz")
+
+# Set current frame
+viewer.setFrame(frame_number)
+
+# Get current frame
+current = viewer.getFrame()
+
+# Start animation
+viewer.startAnimation(speed=500, loop_mode="forward")
+
+# Stop animation
+viewer.stopAnimation()
+
+# Set animation speed
+viewer.setAnimationSpeed(200)
+```
+
+**Labeling:**
+```python
+# Add custom label
+viewer.addLabel("Label Text", {
+    'position': {'x': 0, 'y': 0, 'z': 0},
+    'backgroundColor': 'white',
+    'fontColor': 'black',
+    'fontSize': 16
+})
+
+# Remove all labels
+viewer.removeAllLabels()
+
+# Show automatic atom labels
+viewer.showAtomLabels(True)
+
+# Auto-generate atom index labels
+viewer.autoLabel()
 ```
 
 ### Factory Function
@@ -179,11 +354,12 @@ viewer = view(width=800, height=600)
 
 ## Supported File Formats
 
-- **XYZ**: Simple Cartesian coordinates
+- **XYZ**: Simple Cartesian coordinates with multi-frame support
 - **PDB**: Protein Data Bank format
-- **SDF**: Structure Data Format
+- **SDF**: Structure Data Format (MDL)
 - **MOL**: MDL Molfile format
 - **MOL2**: Tripos MOL2 format
+- **Other formats**: Any format supported by 3Dmol.js
 
 ## Panel Integration Features
 
@@ -192,6 +368,8 @@ viewer = view(width=800, height=600)
 - ✅ **Dashboard Layout**: Seamless integration with Panel layouts
 - ✅ **Jupyter Support**: Works in Jupyter notebooks and JupyterLab
 - ✅ **Server Apps**: Deploy as Panel server applications
+- ✅ **Animation Support**: Multi-frame molecular trajectories with controls
+- ✅ **Labeling System**: Custom labels and automatic atom numbering
 - ✅ **py3dmol Compatibility**: Drop-in replacement for py3dmol in many cases
 
 ## Running the Examples
@@ -200,8 +378,8 @@ viewer = view(width=800, height=600)
 
 ```bash
 # Clone and install
-git clone https://github.com/luvwinnie/panel-chem.git
-cd panel-chem
+git clone https://github.com/luvwinnie/panel-3dmol.git
+cd panel-3dmol
 pip install -e .
 
 # Run the example
@@ -213,7 +391,64 @@ python test_viewer.py
 
 ```bash
 jupyter notebook
-# Run the notebook examples
+# Run the notebook examples in the notebooks/ directory
+```
+
+## Advanced Usage
+
+### Custom Styling
+
+```python
+# Advanced styling with multiple representations
+viewer.setStyle({}, {
+    'stick': {'radius': 0.1, 'color': 'blue'},
+    'sphere': {'radius': 0.3, 'colorscheme': 'Jmol'}
+})
+
+# Protein-specific styling
+viewer.setStyle({'resn': 'ALA'}, {'cartoon': {'color': 'red'}})
+viewer.setStyle({'resn': 'GLY'}, {'cartoon': {'color': 'green'}})
+```
+
+### Animation Options
+
+```python
+# Custom animation with 3Dmol.js options
+viewer.setAnimationOptions(
+    loop='bounce',          # 'forward', 'reverse', 'bounce'
+    interval=50,            # Frame interval in ms
+    reps=0                  # 0 = infinite, >0 = number of repeats
+)
+```
+
+### Complex Labeling
+
+```python
+# Multiple custom labels with different styles
+labels = [
+    {
+        'text': 'Active Site',
+        'options': {
+            'position': {'x': 10.5, 'y': 12.3, 'z': 8.7},
+            'backgroundColor': 'yellow',
+            'fontColor': 'red',
+            'fontSize': 20,
+            'borderThickness': 2
+        }
+    },
+    {
+        'text': 'Substrate',
+        'options': {
+            'position': {'x': 5.2, 'y': 8.1, 'z': 3.4},
+            'backgroundColor': 'lightblue',
+            'fontColor': 'navy',
+            'fontSize': 16
+        }
+    }
+]
+
+for label in labels:
+    viewer.addLabel(label['text'], label['options'])
 ```
 
 ## Deployment
@@ -230,7 +465,7 @@ pn.extension()
 def create_app():
     viewer = Mol3DViewer()
     # ... your app logic
-    return app
+    return viewer
 
 pn.serve(create_app, port=5007, show=True)
 ```
@@ -240,7 +475,7 @@ pn.serve(create_app, port=5007, show=True)
 ```dockerfile
 FROM python:3.9
 
-RUN pip install panel git+https://github.com/luvwinnie/panel-chem.git
+RUN pip install panel git+https://github.com/luvwinnie/panel-3dmol.git
 
 COPY app.py .
 EXPOSE 5007
